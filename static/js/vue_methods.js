@@ -6745,6 +6745,22 @@ let vue_methods = {
       }
     }
   },
+  async openExtfile(){
+    const response = await fetch('/api/get_extfile',{
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    if (response.ok) {
+      // 拿到Extfile
+      const data = await response.json();
+      let extfile = data.extfile;    // 打开文件夹
+      if (this.isElectron){
+        window.electronAPI.openPath(extfile);
+      }
+    }
+  },
   async changeHAEnabled(){
     if (this.HASettings.enabled){
       const response = await fetch('/start_HA',{
