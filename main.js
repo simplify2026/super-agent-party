@@ -582,7 +582,6 @@ app.whenReady().then(async () => {
           skipTaskbar: false,
           hasShadow: false,
           backgroundColor: 'rgba(0, 0, 0, 0)',
-          titleBarStyle: 'hidden'
         });
       } else {
         // 普通窗口配置
