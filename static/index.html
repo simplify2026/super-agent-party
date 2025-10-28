@@ -332,7 +332,19 @@ if ('serviceWorker' in navigator) {
           
           <!-- 分隔线 -->
           <div class="extensions-divider" v-if="extensions.length > 0">
-            <span>{{ t('availableExtensions') }}</span>
+            <span>
+              {{ t('availableExtensions') }}
+              <el-link
+                type="primary"
+                :underline="false"
+                href="#" 
+                @click.stop.prevent="switchToExtensionPage();showExtensionsDialog = false" 
+              >
+                <el-icon class="mr-1">
+                  <i class="fa-solid fa-puzzle-piece"></i>
+                </el-icon>{{ t('goToExtensionPage') }}
+              </el-link>
+            </span>
           </div>
           <!-- 扩展列表 -->
           <el-empty v-if="extensions.length === 0" :description="t('noExtensionsFound')" ></el-empty>
