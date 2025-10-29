@@ -233,19 +233,36 @@ class RemotePluginItem(BaseModel):
 class RemotePluginList(BaseModel):
     plugins: List[RemotePluginItem]
 
+# 把路由函数整个替换成下面这段即可
 @router.get("/remote-list", response_model=RemotePluginList)
 async def remote_plugin_list():
-    try:
-        # 1. 拉取原始 JSON
-        gh_url = ("https://raw.githubusercontent.com/"
-                  "super-agent-party/super-agent-party.github.io/"
-                  "main/plugins.json")
-        async with httpx.AsyncClient(timeout=10) as cli:
-            resp = await cli.get(gh_url)
-            resp.raise_for_status()
-            remote = resp.json()          # 现在是真正的 List[dict]
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"无法获取远程插件列表: {e}")
+    github_raw = (
+        "https://raw.githubusercontent.com/"
+        "super-agent-party/super-agent-party.github.io/"
+        "main/plugins.json"
+    )
+    gitee_raw = (
+        "https://gitee.com/super-agent-party/super-agent-party.github.io/"
+        "raw/main/plugins.json"
+    )
+
+    # 1. 拉取远程插件列表（GitHub → Gitee 回退）
+    remote: list[dict] | None = None
+    for url in (github_raw, gitee_raw):
+        try:
+            async with httpx.AsyncClient(timeout=10) as cli:
+                r = await cli.get(url)
+                r.raise_for_status()
+                remote = r.json()
+                break
+        except Exception:
+            # 第一次失败继续尝试第二个地址；第二次失败再抛 502
+            if url == gitee_raw:
+                raise HTTPException(
+                    status_code=502,
+                    detail="无法获取远程插件列表（GitHub 与 Gitee 均失败）"
+                )
+            continue
 
     # 2. 本地已安装
     try:
@@ -265,7 +282,7 @@ async def remote_plugin_list():
         path_parts = parse.path.strip("/").split("/")
         ext_id = f"{path_parts[0]}_{path_parts[1]}"
         return RemotePluginItem(
-            id = ext_id,
+            id=ext_id,
             name=p.get("name", "未命名"),
             description=p.get("description", ""),
             author=p.get("author", "未知"),

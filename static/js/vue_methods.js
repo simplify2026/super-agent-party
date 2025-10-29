@@ -1704,7 +1704,7 @@ let vue_methods = {
         }
       } finally {
         if (this.allBriefly){
-          lastMessage.briefly = true;
+          this.messages[this.messages.length - 1].briefly = true;
         }
         // 如果conversationId为null
         if (this.conversationId === null) {
