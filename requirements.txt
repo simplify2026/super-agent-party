@@ -43,3 +43,6 @@ arxiv
 ddgs
 claude-agent-sdk
 aiofiles
+sherpa_onnx
+soundfile
+nvidia-ml-py
