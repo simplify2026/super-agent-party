@@ -1,4 +1,4 @@
-![image](static/source/agent_party.png)
+![image](static/source/cover.png)
 
 <div align="center">
   <a href="./README_ZH.md">👉 简体中文</a> |
