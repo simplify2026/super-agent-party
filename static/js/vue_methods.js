@@ -5472,7 +5472,7 @@ let vue_methods = {
         .map(s => s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r'));
 
       // 2. 构造正则：确保至少有一个合法捕获组
-      const voiceKeys = ['default', ...Object.keys(this.ttsSettings.newtts || {})]
+      const voiceKeys = ['default', 'silence', ...Object.keys(this.ttsSettings.newtts || {})]
         .filter(Boolean);
       const openTagRe = new RegExp(`<(${voiceKeys.join('|')})>`, 'gi');
       const closeTagRe = /<\/\w+>/gi;
@@ -5669,42 +5669,8 @@ let vue_methods = {
       console.log(`Processing TTS chunk ${index}:`, chunk_text ,"\nvoice:" ,voice);
       
       try {
-        const response = await fetch(`/tts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ttsSettings: this.ttsSettings,text: chunk_text, index, voice})
-        });
-
-        if (response.ok) {
-          const audioBlob = await response.blob();
-          
-          // 本地播放 blob URL
-          const audioUrl = URL.createObjectURL(audioBlob);
-          
-          message.audioChunks[index] = { 
-            url: audioUrl, 
-            expressions: chunk_expressions, // 添加表情
-            text: chunk_text,
-            index 
-          };
-          if (index == 0){
-            // 结束计时并打印时间
-            this.stopTimer();
-            console.log(`TTS chunk ${index} processed in ${this.elapsedTime}ms`);
-          }
-          // 转换为 Base64
-          const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload  = () => resolve(reader.result.split(',')[1]); // 去掉 data:*
-            reader.onerror = reject;
-            reader.readAsDataURL(audioBlob);
-          });
-          const audioDataUrl = `data:${audioBlob.type};base64,${base64}`;
-          this.cur_audioDatas[index]= audioDataUrl;
-          console.log(`TTS chunk ${index} processed`);
-          this.checkAudioPlayback();
-        } else {
-          console.error(`TTS failed for chunk ${index}`);
+        if (voice=='silence'){
+          console.log(`TTS chunk ${index} is silence`);
           message.audioChunks[index] = { 
             url: null, 
             expressions: chunk_expressions, // 添加表情
@@ -5713,7 +5679,54 @@ let vue_methods = {
           };
           this.cur_audioDatas[index]= null;
           this.checkAudioPlayback();
+        }else{
+          const response = await fetch(`/tts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ttsSettings: this.ttsSettings,text: chunk_text, index, voice})
+          });
+
+          if (response.ok) {
+            const audioBlob = await response.blob();
+            
+            // 本地播放 blob URL
+            const audioUrl = URL.createObjectURL(audioBlob);
+            
+            message.audioChunks[index] = { 
+              url: audioUrl, 
+              expressions: chunk_expressions, // 添加表情
+              text: chunk_text,
+              index 
+            };
+            if (index == 0){
+              // 结束计时并打印时间
+              this.stopTimer();
+              console.log(`TTS chunk ${index} processed in ${this.elapsedTime}ms`);
+            }
+            // 转换为 Base64
+            const base64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload  = () => resolve(reader.result.split(',')[1]); // 去掉 data:*
+              reader.onerror = reject;
+              reader.readAsDataURL(audioBlob);
+            });
+            const audioDataUrl = `data:${audioBlob.type};base64,${base64}`;
+            this.cur_audioDatas[index]= audioDataUrl;
+            console.log(`TTS chunk ${index} processed`);
+            this.checkAudioPlayback();
+          } else {
+            console.error(`TTS failed for chunk ${index}`);
+            message.audioChunks[index] = { 
+              url: null, 
+              expressions: chunk_expressions, // 添加表情
+              text: chunk_text,
+              index
+            };
+            this.cur_audioDatas[index]= null;
+            this.checkAudioPlayback();
+          }
         }
+
       } catch (error) {
         console.error(`Error processing TTS chunk ${index}:`, error);
         this.TTSrunning= false;
