@@ -14,15 +14,25 @@ class NodeExtension:
         self.pkg      = json.loads((self.root / "package.json").read_text())
 
     async def start(self) -> int:
-        """启动子进程，返回实际监听的端口"""
         if self.proc and self.proc.returncode is None:
             return self.port
-        # 1. 安装依赖
-        proc = await asyncio.create_subprocess_exec(
-            "npm", "install", "--production",
-            cwd=self.root, stdout=asyncio.subprocess.DEVNULL
-        )
-        await proc.wait()   # ✅ 先拿返回的 Process 对象，再 await wait()
+
+        # 0. 快速判断：node_modules 存在且比 package.json 新
+        pkg_file = self.root / "package.json"
+        nm_folder = self.root / "node_modules"
+        if nm_folder.is_dir() and nm_folder.stat().st_mtime >= pkg_file.stat().st_mtime:
+            # 已安装且没改动过，跳过
+            print(f"[{self.ext_id}] node_modules 已存在，跳过 npm install")
+        else:
+            # 1. 真正安装
+            print(f"[{self.ext_id}] 首次/依赖变更，执行 npm install")
+            proc = await asyncio.create_subprocess_exec(
+                "npm", "install", "--production",
+                cwd=self.root, stdout=asyncio.subprocess.DEVNULL
+            )
+            await proc.wait()
+            # 安装完成后把 node_modules 时间戳刷到最新，避免下次重复
+            nm_folder.touch(exist_ok=True)
         # 2. 选端口
         want = self.pkg.get("nodePort", 0)
         self.port = want if want else _free_port()
