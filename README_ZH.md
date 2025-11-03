@@ -105,25 +105,17 @@
   ```shell
   git clone https://github.com/heshengtao/super-agent-party.git
   cd super-agent-party
-  uv sync
-  npm install
-  cd static
-  npm install
-  cd ..
-  start_with_dev.bat
+  install.bat
+  npm run dev
   ```
 
 - linux or mac ：
   ```shell
   git clone https://github.com/heshengtao/super-agent-party.git
   cd super-agent-party
-  uv sync
-  npm install
-  cd static
-  npm install
-  cd ..
-  chmod +x start_with_dev.sh
-  ./start_with_dev.sh
+  chmod +x install.sh
+  ./install.sh
+  npm run dev
   ```
 
 ## 软件截图

@@ -101,29 +101,21 @@ We provide two mainstream Linux installation package formats for your convenienc
 
 ### Source Code Deployment
 
-- Windows:
+- windows ：
   ```shell
   git clone https://github.com/heshengtao/super-agent-party.git
   cd super-agent-party
-  uv sync
-  npm install
-  cd static
-  npm install
-  cd ..
-  start_with_dev.bat
+  install.bat
+  npm run dev
   ```
 
-- Linux or Mac:
+- linux or mac ：
   ```shell
   git clone https://github.com/heshengtao/super-agent-party.git
   cd super-agent-party
-  uv sync
-  npm install
-  cd static
-  npm install
-  cd ..
-  chmod +x start_with_dev.sh
-  ./start_with_dev.sh
+  chmod +x install.sh
+  ./install.sh
+  npm run dev
   ```
 
 ## Software Screenshots
