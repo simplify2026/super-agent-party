@@ -2653,7 +2653,7 @@ let vue_methods = {
     },
     handleQCProviderVisibleChange(visible) {
       if (!visible) {
-        this.selectQCProvider(this.ccSettings.selectedProvider);
+        this.selectQCProvider(this.qcSettings.selectedProvider);
       }
     },
     handleReasonerProviderVisibleChange(visible) {
