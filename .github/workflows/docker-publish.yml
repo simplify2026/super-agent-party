@@ -1,9 +1,14 @@
 name: Docker Build and Push (Multi-Arch)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:          # ← 手动触发
+    inputs:
+      version:
+        description: '镜像版本号 (如 1.2.3)'
+        required: true
+        default: ''
   push:
-    tags: [ "v*.*.*" ]
+    tags: [ "v*.*.*" ]        # ← 原有 semver 触发
 
 env:
   REGISTRY: docker.io
@@ -42,8 +47,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest
+            # 手动触发：只用输入值 + latest
+            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' }}
+            # Git 标签触发：保持原 semver 逻辑
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
 
       # 构建并推送多架构镜像
       - name: Build and push (amd64 & arm64)
