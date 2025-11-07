@@ -7,18 +7,13 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY pyproject.toml ./
-COPY package.json ./
+COPY . .
 
 RUN pip install uv && \
     uv venv && \
     uv sync
 
-RUN npm install --production --legacy-peer-deps
-
 RUN cd static && npm install --production --legacy-peer-deps && cd ..
-
-COPY . .
 
 RUN mkdir -p uploaded_files && \
     chmod 755 uploaded_files
