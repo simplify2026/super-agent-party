@@ -145,6 +145,11 @@ We provide two mainstream Linux installation package formats for your convenienc
 ### ComfyUI Integration: Converts ComfyUI workflows into agent tools with load balancing across multiple ComfyUI servers.
 ![image](doc/image/comfyui8.jpeg)
 
+
+## Extension
+
+Added a brand-new extension system. You can check available plugins at [plugins list](https://super-agent-party.github.io/plugins.html), or directly view and install them in the party under 【Developer】->【Extensions】. You can also add your own developed extensions to the official plugin list at [super-agent-party.github.io](https://github.com/super-agent-party/super-agent-party.github.io)! 
+
 ## Hardware requirements
 
 - CPU: 2 cores or more
