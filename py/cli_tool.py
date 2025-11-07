@@ -157,7 +157,7 @@ async def qwen_code_async(prompt: str) -> str | AsyncIterator[str]:
             cwd=cwd,
             env={**os.environ, **extra_config},
         )
-
+        print("你的配置",extra_config)
         async def read_stream(stream, *, is_error: bool = False):
             async for line in stream:
                 prefix = "[ERROR] " if is_error else ""
