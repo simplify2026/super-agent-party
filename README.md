@@ -208,6 +208,7 @@ Please refer to the following document for the main functions:
 | Extensive Native Tools | Tool calling supports asynchronous execution, including web search, knowledge base access, smart home control, browser control, code execution in sandbox environments, controlling ComfyUI for image generation, and Claude code operates the file system. |
 | Custom Tool Interfaces | Supports MCP, A2A, HTTP requests, and any LLM interface as tools for the main agent, enabling users to freely customize their agent's toolchain. |
 | Open External APIs | Developer-friendly with open APIs simulating OpenAI and MCP, as well as desktop pet APIs. |
+| Extension System | You can check out the available plugins in the [Extension List](https://super-agent-party.github.io/plugins.html). You can also view and install plugins directly in Party by navigating to 【Developer】 -> 【Extensions】. You can add your own developed extensions to the official extension list at [super-agent-party.github.io](https://github.com/super-agent-party/super-agent-party.github.io)! |
 | Storage Space | All files and data are stored in the user's local data folder. When deployed with NAS, it can also serve as a personal image or file host within the local network. |
 
 ## Disclaimer:
