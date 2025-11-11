@@ -9278,246 +9278,380 @@ if ('serviceWorker' in navigator) {
                   </div>
                   <!-- 直播页面 -->
                   <div v-show="subMenu === 'live_stream'">
-                    <el-form class="settings-form" :model="liveConfig" label-position="top">
-                      <div class="tool-item">
-                        <!-- 直播配置头部 -->
-                        <div class="tool-header" style="display: flex; justify-content: space-between; align-items: center;">
-                          <span>
-                            <el-icon><i class="fa-solid fa-video"></i></el-icon>
-                            {{ t('live_stream_bot') }}
-                          </span>
-                          <div>
-                            <!-- 启动按钮 -->
-                            <el-tooltip :content="t('start_live')" placement="top">
-                              <el-button 
-                                type="primary" 
-                                @click="startLive" 
-                                :disabled="!isLiveConfigValid || isLiveRunning || isLiveStarting"
-                                circle
-                              >
-                                <template v-if="isLiveStarting">
-                                  <i class="fa-solid fa-spinner fa-spin"></i>
-                                </template>
-                                <template v-else>
-                                  <i class="fa-solid fa-play"></i>
-                                </template>
-                              </el-button>
-                            </el-tooltip>
-                            
-                            <!-- 停止按钮 -->
-                            <el-tooltip :content="t('stop_live')" placement="top">
-                              <el-button 
-                                type="danger" 
-                                @click="stopLive" 
-                                :disabled="!isLiveRunning || isLiveStopping"
-                                circle
-                              >
-                                <template v-if="isLiveStopping">
-                                  <i class="fa-solid fa-spinner fa-spin"></i>
-                                </template>
-                                <template v-else>
-                                  <i class="fa-solid fa-stop"></i>
-                                </template>
-                              </el-button>
-                            </el-tooltip>
-                            
-                            <!-- 重载按钮 -->
-                            <el-tooltip :content="t('reload_live')" placement="top">
-                              <el-button 
-                                @click="reloadLiveConfig" 
-                                :disabled="!isLiveRunning || isLiveReloading"
-                                circle
-                              >
-                                <template v-if="isLiveReloading">
-                                  <i class="fa-solid fa-rotate fa-spin"></i>
-                                </template>
-                                <template v-else>
-                                  <i class="fa-solid fa-rotate"></i>
-                                </template>
-                              </el-button>
-                            </el-tooltip>
-                          </div>
-                        </div>
-
-                        <div class="tool-item">
-                          <div class="tool-header">
-                            <div class="header-left">
+                    <el-tabs v-model="activeLiveTab">
+                      <!-- 配置标签页 -->
+                      <el-tab-pane :label="t('liveConfig')" name="live" key="live">
+                        <el-form class="settings-form" :model="liveConfig" label-position="top">
+                          <div class="tool-item">
+                            <!-- 直播配置头部 -->
+                            <div class="tool-header" style="display: flex; justify-content: space-between; align-items: center;">
                               <span>
-                                {{t('liveSetting')}}
+                                <el-icon><i class="fa-solid fa-video"></i></el-icon>
+                                {{ t('live_stream_bot') }}
                               </span>
+                              <div>
+                                <!-- 启动按钮 -->
+                                <el-tooltip :content="t('start_live')" placement="top">
+                                  <el-button 
+                                    type="primary" 
+                                    @click="startLive" 
+                                    :disabled="!isLiveConfigValid || isLiveRunning || isLiveStarting"
+                                    circle
+                                  >
+                                    <template v-if="isLiveStarting">
+                                      <i class="fa-solid fa-spinner fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-play"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                                
+                                <!-- 停止按钮 -->
+                                <el-tooltip :content="t('stop_live')" placement="top">
+                                  <el-button 
+                                    type="danger" 
+                                    @click="stopLive" 
+                                    :disabled="!isLiveRunning || isLiveStopping"
+                                    circle
+                                  >
+                                    <template v-if="isLiveStopping">
+                                      <i class="fa-solid fa-spinner fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-stop"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                                
+                                <!-- 重载按钮 -->
+                                <el-tooltip :content="t('reload_live')" placement="top">
+                                  <el-button 
+                                    @click="reloadLiveConfig" 
+                                    :disabled="!isLiveRunning || isLiveReloading"
+                                    circle
+                                  >
+                                    <template v-if="isLiveReloading">
+                                      <i class="fa-solid fa-rotate fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-rotate"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                              </div>
                             </div>
-                          </div>
-                          <div class="tool-content">
-                            <el-form-item :label="t('onlyDanmaku')" class="form-item-align" label-position="left">
-                              <el-switch 
-                                v-model="liveConfig.onlyDanmaku" 
-                                @change="autoSaveSettings"
-                              ></el-switch>
-                            </el-form-item>   
-                            <el-form-item :label="t('danmakuQueueLimit')" class="form-item-align" label-position="left">
-                              <el-slider
-                                v-model="liveConfig.danmakuQueueLimit"
-                                :min="1"
-                                :max="30"
-                                :step="1"
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item> 
-                          </div>
-                        </div>
 
-                        <div class="tool-item">
-                          <div class="tool-header">
-                            <div class="header-left">
-                              <span>
-                                {{t('bilibili')}}
-                                <el-link
-                                  type="primary"
-                                  :underline="false"
-                                  href="https://open-live.bilibili.com/" 
-                                  target="_blank"
-                                >
-                                  <el-icon class="mr-1">
-                                    <i class="fa-solid fa-key"></i>
-                                  </el-icon>{{ t('gotoBilibiliOpenLive') }}
-                                </el-link>
-                              </span>
-                            </div>
-                            <el-switch v-model="liveConfig.bilibili_enabled" @click.stop @change="autoSaveSettings"/>
-                          </div>
-                          <div class="tool-content">
-                            <el-form-item :label="t('liveType')">
-                              <el-select
-                                v-model="liveConfig.bilibili_type"
-                                :placeholder="t('liveTypePlaceholder')"
-                                class="full-width-input"
-                                @change="autoSaveSettings"
-                              >
-                                <el-option :label="t('web')" value="web"></el-option>
-                                <el-option :label="t('bilibili_open_live')" value="open_live"></el-option>
-                              </el-select>
-                            </el-form-item>      
-                            <el-form-item :label="t('roomID')" v-if="liveConfig.bilibili_type === 'web'">
-                              <el-input
-                                v-model="liveConfig.bilibili_room_id"
-                                :placeholder="t('roomIDPlaceholder')"
-                                class="full-width-input"
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-                            <el-form-item :label="t('sessdata')" v-if="liveConfig.bilibili_type === 'web'">
-                              <el-input
-                                v-model="liveConfig.bilibili_sessdata"
-                                :placeholder="t('sessdataPlaceholder')"
-                                class="full-width-input"
-                                show-password
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-                            <el-alert
-                              type="info"
-                              :closable="false"
-                              class="mb-2"
-                              v-if="liveConfig.bilibili_type === 'web'"
-                            >
-                              <template #default>
-                                <div class="alert-content">
-                                  {{ t('webBilibiliInfo') }}
+                            <div class="tool-item">
+                              <div class="tool-header">
+                                <div class="header-left">
+                                  <span>
+                                    {{t('liveSetting')}}
+                                  </span>
                                 </div>
-                              </template>
-                            </el-alert>
-                            <el-form-item label="ACCESS KEY ID" v-if="liveConfig.bilibili_type === 'open_live'">
-                              <el-input
-                                v-model="liveConfig.bilibili_ACCESS_KEY_ID"
-                                :placeholder="t('ACCESS_KEY_ID_Placeholder')"
-                                class="full-width-input"
-                                show-password
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-                            <el-form-item label="ACCESS KEY SECRET" v-if="liveConfig.bilibili_type === 'open_live'">
-                              <el-input
-                                v-model="liveConfig.bilibili_ACCESS_KEY_SECRET"
-                                :placeholder="t('ACCESS_KEY_SECRET_Placeholder')"
-                                class="full-width-input"
-                                show-password
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-                            <el-form-item label="APP ID" v-if="liveConfig.bilibili_type === 'open_live'">
-                              <el-input
-                                v-model="liveConfig.bilibili_APP_ID"
-                                :placeholder="t('APP_ID_Placeholder')"
-                                class="full-width-input"
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-                            <el-form-item label="ROOM OWNER AUTH CODE" v-if="liveConfig.bilibili_type === 'open_live'">
-                              <el-input
-                                v-model="liveConfig.bilibili_ROOM_OWNER_AUTH_CODE"
-                                :placeholder="t('ROOM_OWNER_AUTH_CODE_Placeholder')"
-                                class="full-width-input"
-                                show-password
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-                          </div>
-                        </div>
-
-                        <!-- YouTube 配置 -->
-                        <div class="tool-item">
-                          <div class="tool-header">
-                            <div class="header-left">
-                              <span>
-                                YouTube
-                                <el-link
-                                  type="primary"
-                                  :underline="false"
-                                  href="https://console.cloud.google.com/apis/credentials"
-                                  target="_blank"
-                                >
-                                  <el-icon class="mr-1"><i class="fa-solid fa-key"></i></el-icon>
-                                  {{ t('getYouTubeAPIKey') }}
-                                </el-link>
-                              </span>
+                              </div>
+                              <div class="tool-content">
+                                <el-form-item :label="t('onlyDanmaku')" class="form-item-align" label-position="left">
+                                  <el-switch 
+                                    v-model="liveConfig.onlyDanmaku" 
+                                    @change="autoSaveSettings"
+                                  ></el-switch>
+                                </el-form-item>   
+                                <el-form-item :label="t('danmakuQueueLimit')" class="form-item-align" label-position="left">
+                                  <el-slider
+                                    v-model="liveConfig.danmakuQueueLimit"
+                                    :min="1"
+                                    :max="30"
+                                    :step="1"
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item> 
+                              </div>
                             </div>
-                            <el-switch
-                              v-model="liveConfig.youtube_enabled"
-                              @change="autoSaveSettings"
-                            />
                           </div>
+                        </el-form>
+                      </el-tab-pane>
+                      <el-tab-pane :label="t('bilibiliLive')" name="bilibili" key="bilibili">
+                        <el-form class="settings-form" :model="liveConfig" label-position="top">
+                          <div class="tool-item">
+                            <!-- 直播配置头部 -->
+                            <div class="tool-header" style="display: flex; justify-content: space-between; align-items: center;">
+                              <span>
+                                <el-icon><i class="fa-solid fa-video"></i></el-icon>
+                                {{ t('live_stream_bot') }}
+                              </span>
+                              <div>
+                                <!-- 启动按钮 -->
+                                <el-tooltip :content="t('start_live')" placement="top">
+                                  <el-button 
+                                    type="primary" 
+                                    @click="startLive" 
+                                    :disabled="!isLiveConfigValid || isLiveRunning || isLiveStarting"
+                                    circle
+                                  >
+                                    <template v-if="isLiveStarting">
+                                      <i class="fa-solid fa-spinner fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-play"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                                
+                                <!-- 停止按钮 -->
+                                <el-tooltip :content="t('stop_live')" placement="top">
+                                  <el-button 
+                                    type="danger" 
+                                    @click="stopLive" 
+                                    :disabled="!isLiveRunning || isLiveStopping"
+                                    circle
+                                  >
+                                    <template v-if="isLiveStopping">
+                                      <i class="fa-solid fa-spinner fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-stop"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                                
+                                <!-- 重载按钮 -->
+                                <el-tooltip :content="t('reload_live')" placement="top">
+                                  <el-button 
+                                    @click="reloadLiveConfig" 
+                                    :disabled="!isLiveRunning || isLiveReloading"
+                                    circle
+                                  >
+                                    <template v-if="isLiveReloading">
+                                      <i class="fa-solid fa-rotate fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-rotate"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                              </div>
+                            </div>
 
-                          <div class="tool-content">
-                            <el-form-item :label="t('youtubeVideoId')">
-                              <el-input
-                                v-model="liveConfig.youtube_video_id"
-                                :placeholder="t('youtubeVideoIdPlaceholder')"
-                                class="full-width-input"
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-
-                            <el-form-item :label="t('youtubeApiKey')">
-                              <el-input
-                                v-model="liveConfig.youtube_api_key"
-                                :placeholder="t('youtubeApiKeyPlaceholder')"
-                                class="full-width-input"
-                                show-password
-                                @change="autoSaveSettings"
-                              />
-                            </el-form-item>
-
-                            <el-alert type="info" :closable="false" class="mb-2">
-                              <template #default>
-                                <div class="alert-content">
-                                  {{ t('youtubeHelp') }}
+                            <div class="tool-item">
+                              <div class="tool-header">
+                                <div class="header-left">
+                                  <span>
+                                    {{t('bilibili')}}
+                                    <el-link
+                                      type="primary"
+                                      :underline="false"
+                                      href="https://open-live.bilibili.com/" 
+                                      target="_blank"
+                                    >
+                                      <el-icon class="mr-1">
+                                        <i class="fa-solid fa-key"></i>
+                                      </el-icon>{{ t('gotoBilibiliOpenLive') }}
+                                    </el-link>
+                                  </span>
                                 </div>
-                              </template>
-                            </el-alert>
+                                <el-switch v-model="liveConfig.bilibili_enabled" @click.stop @change="autoSaveSettings"/>
+                              </div>
+                              <div class="tool-content">
+                                <el-form-item :label="t('liveType')">
+                                  <el-select
+                                    v-model="liveConfig.bilibili_type"
+                                    :placeholder="t('liveTypePlaceholder')"
+                                    class="full-width-input"
+                                    @change="autoSaveSettings"
+                                  >
+                                    <el-option :label="t('web')" value="web"></el-option>
+                                    <el-option :label="t('bilibili_open_live')" value="open_live"></el-option>
+                                  </el-select>
+                                </el-form-item>      
+                                <el-form-item :label="t('roomID')" v-if="liveConfig.bilibili_type === 'web'">
+                                  <el-input
+                                    v-model="liveConfig.bilibili_room_id"
+                                    :placeholder="t('roomIDPlaceholder')"
+                                    class="full-width-input"
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+                                <el-form-item :label="t('sessdata')" v-if="liveConfig.bilibili_type === 'web'">
+                                  <el-input
+                                    v-model="liveConfig.bilibili_sessdata"
+                                    :placeholder="t('sessdataPlaceholder')"
+                                    class="full-width-input"
+                                    show-password
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+                                <el-alert
+                                  type="info"
+                                  :closable="false"
+                                  class="mb-2"
+                                  v-if="liveConfig.bilibili_type === 'web'"
+                                >
+                                  <template #default>
+                                    <div class="alert-content">
+                                      {{ t('webBilibiliInfo') }}
+                                    </div>
+                                  </template>
+                                </el-alert>
+                                <el-form-item label="ACCESS KEY ID" v-if="liveConfig.bilibili_type === 'open_live'">
+                                  <el-input
+                                    v-model="liveConfig.bilibili_ACCESS_KEY_ID"
+                                    :placeholder="t('ACCESS_KEY_ID_Placeholder')"
+                                    class="full-width-input"
+                                    show-password
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+                                <el-form-item label="ACCESS KEY SECRET" v-if="liveConfig.bilibili_type === 'open_live'">
+                                  <el-input
+                                    v-model="liveConfig.bilibili_ACCESS_KEY_SECRET"
+                                    :placeholder="t('ACCESS_KEY_SECRET_Placeholder')"
+                                    class="full-width-input"
+                                    show-password
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+                                <el-form-item label="APP ID" v-if="liveConfig.bilibili_type === 'open_live'">
+                                  <el-input
+                                    v-model="liveConfig.bilibili_APP_ID"
+                                    :placeholder="t('APP_ID_Placeholder')"
+                                    class="full-width-input"
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+                                <el-form-item label="ROOM OWNER AUTH CODE" v-if="liveConfig.bilibili_type === 'open_live'">
+                                  <el-input
+                                    v-model="liveConfig.bilibili_ROOM_OWNER_AUTH_CODE"
+                                    :placeholder="t('ROOM_OWNER_AUTH_CODE_Placeholder')"
+                                    class="full-width-input"
+                                    show-password
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+                              </div>
+                            </div>
+
                           </div>
-                        </div>
-                      </div>
-                    </el-form>
+                        </el-form>
+                      </el-tab-pane>
+                      <el-tab-pane :label="t('youtubeLive')" name="youtube" key="youtube">
+                        <el-form class="settings-form" :model="liveConfig" label-position="top">
+                          <div class="tool-item">
+                            <!-- 直播配置头部 -->
+                            <div class="tool-header" style="display: flex; justify-content: space-between; align-items: center;">
+                              <span>
+                                <el-icon><i class="fa-solid fa-video"></i></el-icon>
+                                {{ t('live_stream_bot') }}
+                              </span>
+                              <div>
+                                <!-- 启动按钮 -->
+                                <el-tooltip :content="t('start_live')" placement="top">
+                                  <el-button 
+                                    type="primary" 
+                                    @click="startLive" 
+                                    :disabled="!isLiveConfigValid || isLiveRunning || isLiveStarting"
+                                    circle
+                                  >
+                                    <template v-if="isLiveStarting">
+                                      <i class="fa-solid fa-spinner fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-play"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                                
+                                <!-- 停止按钮 -->
+                                <el-tooltip :content="t('stop_live')" placement="top">
+                                  <el-button 
+                                    type="danger" 
+                                    @click="stopLive" 
+                                    :disabled="!isLiveRunning || isLiveStopping"
+                                    circle
+                                  >
+                                    <template v-if="isLiveStopping">
+                                      <i class="fa-solid fa-spinner fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-stop"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                                
+                                <!-- 重载按钮 -->
+                                <el-tooltip :content="t('reload_live')" placement="top">
+                                  <el-button 
+                                    @click="reloadLiveConfig" 
+                                    :disabled="!isLiveRunning || isLiveReloading"
+                                    circle
+                                  >
+                                    <template v-if="isLiveReloading">
+                                      <i class="fa-solid fa-rotate fa-spin"></i>
+                                    </template>
+                                    <template v-else>
+                                      <i class="fa-solid fa-rotate"></i>
+                                    </template>
+                                  </el-button>
+                                </el-tooltip>
+                              </div>
+                            </div>
+
+                            <!-- YouTube 配置 -->
+                            <div class="tool-item">
+                              <div class="tool-header">
+                                <div class="header-left">
+                                  <span>
+                                    YouTube
+                                    <el-link
+                                      type="primary"
+                                      :underline="false"
+                                      href="https://console.cloud.google.com/apis/credentials"
+                                      target="_blank"
+                                    >
+                                      <el-icon class="mr-1"><i class="fa-solid fa-key"></i></el-icon>
+                                      {{ t('getYouTubeAPIKey') }}
+                                    </el-link>
+                                  </span>
+                                </div>
+                                <el-switch
+                                  v-model="liveConfig.youtube_enabled"
+                                  @change="autoSaveSettings"
+                                />
+                              </div>
+
+                              <div class="tool-content">
+                                <el-form-item :label="t('youtubeVideoId')">
+                                  <el-input
+                                    v-model="liveConfig.youtube_video_id"
+                                    :placeholder="t('youtubeVideoIdPlaceholder')"
+                                    class="full-width-input"
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+
+                                <el-form-item :label="t('youtubeApiKey')">
+                                  <el-input
+                                    v-model="liveConfig.youtube_api_key"
+                                    :placeholder="t('youtubeApiKeyPlaceholder')"
+                                    class="full-width-input"
+                                    show-password
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
+
+                                <el-alert type="info" :closable="false" class="mb-2">
+                                  <template #default>
+                                    <div class="alert-content">
+                                      {{ t('youtubeHelp') }}
+                                    </div>
+                                  </template>
+                                </el-alert>
+                              </div>
+                            </div>
+                          </div>
+                        </el-form>
+                      </el-tab-pane>
+                    </el-tabs>
                   </div>
                 </div>
             </div>

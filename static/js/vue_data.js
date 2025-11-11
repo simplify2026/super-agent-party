@@ -87,6 +87,7 @@ let vue_data = {
     isCollapse: true,
     isBtnCollapse: true,
     activeMenu: 'home',
+    activeLiveTab: 'live',
     isMaximized: false,
     hasUpdate: false,
     updateSuccess: false,
