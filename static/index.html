@@ -5246,38 +5246,6 @@ if ('serviceWorker' in navigator) {
 
               <!-- 浏览器控制界面 -->
               <div v-show="subMenu === 'chromeMCP'" class="page">
-                 <!-- Node.js 卡片：已安装 & 未安装 双状态 -->
-                <el-card shadow="hover" class="sherpa-card">
-                  <!-- 头部：标题 + 状态标签 -->
-                  <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><strong>Node.js</strong></span>
-
-                    <div class="d-flex gap-2">
-                      <el-button
-                        v-if="!nodeInstalled"
-                        type="primary"
-                        :loading="nodeInstalling"
-                        @click="installNode"
-                      >
-                        <i class="fa-solid fa-download"></i>
-                        {{ t('installNode') }}
-                      </el-button>
-                      <el-tag v-else type="success" effect="dark" size="large">  
-                        <i class="fa-solid fa-circle-check"></i>
-                        {{ t('installed') }}
-                      </el-tag>
-                    </div>
-                  </div>
-
-                  <!-- 进度条 -->
-                  <el-progress
-                    v-if="nodeInstalling && nodeProgress > 0"
-                    :percentage="nodeProgress"
-                    :status="nodeProgress === 100 ? 'success' : null"
-                    style="margin-top: 16px;"
-                    :stroke-width="10"
-                  />
-                </el-card>
                 <el-form :model="chromeMCPSettings" class="settings-form"  label-position="top">
                   <div class="tool-item">
                     <div class="tool-header">
@@ -5321,43 +5289,43 @@ if ('serviceWorker' in navigator) {
                       </el-alert>
                     </div>
                   </div>
+                  <!-- Node.js 卡片：已安装 & 未安装 双状态 -->
+                  <el-card shadow="hover" class="sherpa-card">
+                    <!-- 头部：标题 + 状态标签 -->
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                      <span><strong>Node.js</strong></span>
+
+                      <div class="d-flex gap-2">
+                        <el-button
+                          v-if="!nodeInstalled"
+                          type="primary"
+                          :loading="nodeInstalling"
+                          @click="installNode"
+                        >
+                          <i class="fa-solid fa-download"></i>
+                          {{ t('installNode') }}
+                        </el-button>
+                        <el-tag v-else type="success" effect="dark" size="large">  
+                          <i class="fa-solid fa-circle-check"></i>
+                          {{ t('installed') }}
+                        </el-tag>
+                      </div>
+                    </div>
+
+                    <!-- 进度条 -->
+                    <el-progress
+                      v-if="nodeInstalling && nodeProgress > 0"
+                      :percentage="nodeProgress"
+                      :status="nodeProgress === 100 ? 'success' : null"
+                      style="margin-top: 16px;"
+                      :stroke-width="10"
+                    />
+                  </el-card>
                 </el-form> 
               </div>
               
               <!-- SQL控制界面 -->
               <div v-show="subMenu === 'sql'" class="page">
-                <!-- uv 卡片：已安装 & 未安装 双状态 -->
-                <el-card shadow="hover" class="sherpa-card">
-                  <!-- 头部：标题 + 状态标签 -->
-                  <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><strong>UV</strong></span>
-
-                    <div class="d-flex gap-2">
-                      <el-button
-                        v-if="!uvInstalled"
-                        type="primary"
-                        :loading="uvInstalling"
-                        @click="installUv"
-                      >
-                        <i class="fa-solid fa-download"></i>
-                        {{ t('installUv') }}
-                      </el-button>
-                      <el-tag v-else type="success" effect="dark" size="large">
-                        <i class="fa-solid fa-circle-check"></i>
-                        {{ t('installed') }}
-                      </el-tag>
-                    </div>
-                  </div>
-
-                  <!-- 进度条 -->
-                  <el-progress
-                    v-if="uvInstalling && uvProgress > 0"
-                    :percentage="uvProgress"
-                    :status="uvProgress === 100 ? 'success' : null"
-                    style="margin-top: 16px;"
-                    :stroke-width="10"
-                  />
-                </el-card>
                 <el-form :model="sqlSettings" class="settings-form"  label-position="top">
                   <div class="tool-item">
                     <div class="tool-header">
@@ -5445,6 +5413,38 @@ if ('serviceWorker' in navigator) {
                       </el-alert>
                     </div>                   
                   </div>
+                  <!-- uv 卡片：已安装 & 未安装 双状态 -->
+                  <el-card shadow="hover" class="sherpa-card">
+                    <!-- 头部：标题 + 状态标签 -->
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                      <span><strong>UV</strong></span>
+
+                      <div class="d-flex gap-2">
+                        <el-button
+                          v-if="!uvInstalled"
+                          type="primary"
+                          :loading="uvInstalling"
+                          @click="installUv"
+                        >
+                          <i class="fa-solid fa-download"></i>
+                          {{ t('installUv') }}
+                        </el-button>
+                        <el-tag v-else type="success" effect="dark" size="large">
+                          <i class="fa-solid fa-circle-check"></i>
+                          {{ t('installed') }}
+                        </el-tag>
+                      </div>
+                    </div>
+
+                    <!-- 进度条 -->
+                    <el-progress
+                      v-if="uvInstalling && uvProgress > 0"
+                      :percentage="uvProgress"
+                      :status="uvProgress === 100 ? 'success' : null"
+                      style="margin-top: 16px;"
+                      :stroke-width="10"
+                    />
+                  </el-card>
                 </el-form> 
               </div>
 
