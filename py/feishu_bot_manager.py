@@ -48,6 +48,7 @@ class FeishuBotManager:
         self._ready_complete = threading.Event()
         self._startup_error = None
         self.ws = None  # 飞书长连接客户端
+        self._stop_requested = False  # 添加停止请求标志
         
     def start_bot(self, config):
         """在新线程中启动飞书机器人"""
@@ -59,6 +60,7 @@ class FeishuBotManager:
         self._startup_complete.clear()
         self._ready_complete.clear()
         self._startup_error = None
+        self._stop_requested = False
         
         # 使用线程方式启动
         self.bot_thread = threading.Thread(
@@ -132,23 +134,19 @@ class FeishuBotManager:
                 config.appid, 
                 config.secret,
                 event_handler=event_dispatcher,
-                log_level=lark.LogLevel.INFO
+                log_level=lark.LogLevel.INFO,
+                auto_reconnect=False  # 禁用自动重连，便于控制
             )
             
-            # 设置连接已建立标志
-            self._startup_complete.set()
-            self._ready_complete.set()
-            self.is_running = True
-            logging.info("飞书机器人已连接并就绪")
-            
-            # 启动长连接
-            self.ws.start()
+            # 在事件循环中运行WebSocket客户端
+            self.loop.run_until_complete(self._async_run_websocket())
             
         except Exception as e:
-            logging.error(f"飞书机器人线程异常: {e}")
-            # 确保错误被记录并传递
-            if not self._startup_error:
-                self._startup_error = str(e)
+            if not self._stop_requested:  # 只有非主动停止的错误才记录
+                logging.error(f"飞书机器人线程异常: {e}")
+                # 确保错误被记录并传递
+                if not self._startup_error:
+                    self._startup_error = str(e)
             # 确保启动等待被解除
             if not self._startup_complete.is_set():
                 self._startup_complete.set()
@@ -157,30 +155,114 @@ class FeishuBotManager:
         finally:
             self._cleanup()
     
+    async def _async_run_websocket(self):
+        """异步运行WebSocket连接"""
+        try:
+            # 建立连接
+            await self.ws._connect()
+            
+            # 设置启动完成标志
+            self._startup_complete.set()
+            self._ready_complete.set()
+            self.is_running = True
+            logging.info("飞书机器人WebSocket连接已建立")
+            
+            # 启动ping循环
+            ping_task = asyncio.create_task(self.ws._ping_loop())
+            
+            # 启动消息接收循环
+            receive_task = asyncio.create_task(self._message_receive_loop())
+            
+            # 等待任务完成或停止信号
+            try:
+                await asyncio.gather(ping_task, receive_task, return_exceptions=True)
+            except asyncio.CancelledError:
+                logging.info("WebSocket任务被取消")
+            except Exception as e:
+                if not self._stop_requested:
+                    logging.error(f"WebSocket任务异常: {e}")
+                    
+        except Exception as e:
+            if not self._stop_requested:
+                logging.error(f"WebSocket连接失败: {e}")
+                self._startup_error = str(e)
+            raise
+    
+    async def _message_receive_loop(self):
+        """消息接收循环"""
+        try:
+            while not self._stop_requested and not self._shutdown_event.is_set():
+                if self.ws._conn is None:
+                    break
+                    
+                try:
+                    # 设置超时接收消息
+                    msg = await asyncio.wait_for(self.ws._conn.recv(), timeout=1.0)
+                    # 处理消息
+                    asyncio.create_task(self.ws._handle_message(msg))
+                except asyncio.TimeoutError:
+                    # 超时是正常的，继续循环
+                    continue
+                except Exception as e:
+                    if not self._stop_requested:
+                        logging.error(f"接收消息异常: {e}")
+                    break
+                    
+        except asyncio.CancelledError:
+            logging.info("消息接收循环被取消")
+        except Exception as e:
+            if not self._stop_requested:
+                logging.error(f"消息接收循环异常: {e}")
+    
     def _on_bot_ready(self):
         """机器人就绪回调"""
         self.is_running = True
-        self._ready_complete.set()
+        if not self._ready_complete.is_set():
+            self._ready_complete.set()
         logging.info("飞书机器人已完全就绪")
 
     def _cleanup(self):
         """清理资源"""
         self.is_running = False
+        logging.info("开始清理飞书机器人资源...")
         
         # 关闭长连接
-        if self.ws:
+        if self.ws and self.loop and not self.loop.is_closed():
             try:
-                self.ws.stop()
+                # 在事件循环中异步关闭连接
+                if asyncio.iscoroutinefunction(self.ws._disconnect):
+                    self.loop.run_until_complete(self.ws._disconnect())
+                logging.info("飞书长连接已关闭")
             except Exception as e:
                 logging.warning(f"关闭飞书长连接时出错: {e}")
         
         # 清理事件循环
         if self.loop and not self.loop.is_closed():
             try:
+                # 获取所有未完成的任务
+                try:
+                    pending = asyncio.all_tasks(self.loop)
+                except RuntimeError:
+                    # 如果事件循环已经关闭，可能会抛出RuntimeError
+                    pending = []
+                
+                # 取消所有未完成的任务
+                for task in pending:
+                    if not task.done():
+                        task.cancel()
+                
+                # 等待任务完成或被取消
+                if pending:
+                    try:
+                        self.loop.run_until_complete(
+                            asyncio.gather(*pending, return_exceptions=True)
+                        )
+                    except Exception as e:
+                        logging.warning(f"等待任务取消时出错: {e}")
+                
                 # 关闭事件循环
-                if not self.loop.is_closed():
-                    self.loop.close()
-                    
+                self.loop.close()
+                logging.info("事件循环已关闭")
             except Exception as e:
                 logging.warning(f"关闭事件循环时出错: {e}")
                 
@@ -188,35 +270,63 @@ class FeishuBotManager:
         self.loop = None
         self.ws = None
         self._shutdown_event.set()
+        logging.info("飞书机器人资源清理完成")
             
     def stop_bot(self):
         """停止飞书机器人"""
         if not self.is_running and not self.bot_thread:
+            logging.info("飞书机器人未在运行")
             return
             
         logging.info("正在停止飞书机器人...")
         
         # 设置停止标志
+        self._stop_requested = True
         self._shutdown_event.set()
         self.is_running = False
         
-        # 停止长连接
-        if self.ws:
+        # 如果有事件循环，尝试优雅停止
+        if self.loop and not self.loop.is_closed():
             try:
-                self.ws.stop()
+                # 获取所有任务并取消它们
+                try:
+                    pending = asyncio.all_tasks(self.loop)
+                    for task in pending:
+                        if not task.done():
+                            task.cancel()
+                except RuntimeError:
+                    pass  # 事件循环可能已经关闭
+                    
+                # 关闭WebSocket连接
+                if self.ws and hasattr(self.ws, '_disconnect'):
+                    try:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self.ws._disconnect(), 
+                            self.loop
+                        )
+                        future.result(timeout=2)
+                        logging.info("WebSocket连接已关闭")
+                    except Exception as e:
+                        logging.warning(f"关闭WebSocket连接时出错: {e}")
+                        
             except Exception as e:
-                logging.warning(f"停止长连接时出错: {e}")
+                logging.warning(f"优雅停止过程中出错: {e}")
         
         # 等待线程结束
         if self.bot_thread and self.bot_thread.is_alive():
             try:
-                self.bot_thread.join(timeout=10)
+                logging.info("等待飞书机器人线程结束...")
+                self.bot_thread.join(timeout=5)
                 if self.bot_thread.is_alive():
-                    logging.warning("飞书机器人线程在超时后仍在运行")
+                    logging.warning("飞书机器人线程在5秒超时后仍在运行，但这是预期的清理行为")
+                else:
+                    logging.info("飞书机器人线程已正常结束")
             except Exception as e:
                 logging.warning(f"等待线程结束时出错: {e}")
-                
-        logging.info("飞书机器人已停止")
+        
+        # 重置停止标志
+        self._stop_requested = False
+        logging.info("飞书机器人停止操作完成")
 
     def get_status(self):
         """获取机器人状态"""
@@ -228,7 +338,8 @@ class FeishuBotManager:
             "loop_running": self.loop and not self.loop.is_closed() if self.loop else False,
             "startup_error": self._startup_error,
             "connection_established": self._startup_complete.is_set(),
-            "ready_completed": self._ready_complete.is_set()
+            "ready_completed": self._ready_complete.is_set(),
+            "stop_requested": self._stop_requested
         }
 
     def __del__(self):
@@ -260,6 +371,16 @@ class FeishuClient:
         
     def sync_handle_message(self, data: P2ImMessageReceiveV1) -> None:
         """同步消息处理函数，用于注册到飞书事件分发器"""
+        # 检查是否已请求停止
+        if self._shutdown_requested:
+            return
+            
+        # 检查管理器是否请求停止
+        if self._manager_ref:
+            manager = self._manager_ref()
+            if manager and manager._stop_requested:
+                return
+        
         try:
             # 获取或创建事件循环
             try:
@@ -268,6 +389,10 @@ class FeishuClient:
                 # 如果当前线程没有事件循环
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
+            
+            # 检查事件循环是否已关闭
+            if loop.is_closed():
+                return
             
             # 在事件循环中运行异步函数
             future = asyncio.run_coroutine_threadsafe(
@@ -278,12 +403,19 @@ class FeishuClient:
             # 可选：等待结果（如果需要）
             # future.result(timeout=30)
         except Exception as e:
-            logging.error(f"处理消息时发生异常: {e}")
+            if not self._shutdown_requested:
+                logging.error(f"处理消息时发生异常: {e}")
 
     async def handle_message(self, data: P2ImMessageReceiveV1) -> None:
         """处理飞书消息的主函数"""
+        # 多重检查停止状态
         if self._shutdown_requested:
             return
+        
+        if self._manager_ref:
+            manager = self._manager_ref()
+            if manager and (manager._stop_requested or not manager.is_running):
+                return
         
         # 标记为就绪状态
         if not self._is_ready:
