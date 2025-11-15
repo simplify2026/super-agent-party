@@ -1,7 +1,7 @@
 {
   "name": "super-agent-party",
-  "version": "v0.3.2",
-  "description": "超级智能体派对v 0.3.2 | 轻松链接一切!",
+  "version": "v0.3.3",
+  "description": "超级智能体派对v 0.3.3 | 轻松链接一切!",
   "main": "main.js",
   "asar": false,
   "scripts": {
