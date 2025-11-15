@@ -6943,10 +6943,28 @@ handleCreateDiscordSeparator(val) {
       };
       if (this.liveConfig.onlyDanmaku){
         if (danmuItem.type === "danmaku" || danmuItem.type === "super_chat") {
-          this.danmu.unshift(danmuItem);
+          if (this.liveConfig.wakeWord){
+            if (data.content.includes(this.liveConfig.wakeWord)){
+              this.danmu.unshift(danmuItem);
+            }
+          }
+          else {
+            this.danmu.unshift(danmuItem);
+          }
         } 
       }else {
-        this.danmu.unshift(danmuItem);
+        if (danmuItem.type === "danmaku" || danmuItem.type === "super_chat") {
+          if (this.liveConfig.wakeWord){
+            if (data.content.includes(this.liveConfig.wakeWord)){
+              this.danmu.unshift(danmuItem);
+            }
+          }
+          else {
+            this.danmu.unshift(danmuItem);
+          }
+        } else{
+          this.danmu.unshift(danmuItem);
+        }
       }
       
       

@@ -1271,6 +1271,7 @@ let vue_data = {
     liveConfig: {
       onlyDanmaku: true,
       danmakuQueueLimit: 5,
+      wakeWord: '',
       bilibili_enabled: false,
       bilibili_type: 'web',
       bilibili_room_id: '',

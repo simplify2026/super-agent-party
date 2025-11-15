@@ -9726,6 +9726,14 @@ if ('serviceWorker' in navigator) {
                                     @change="autoSaveSettings"
                                   />
                                 </el-form-item> 
+                                <el-form-item :label="t('danmakuWakeWord')">
+                                  <el-input
+                                    v-model="liveConfig.wakeWord"
+                                    :placeholder="t('wakeWordPlaceholder')"
+                                    class="full-width-input"
+                                    @change="autoSaveSettings"
+                                  />
+                                </el-form-item>
                               </div>
                             </div>
                           </div>
