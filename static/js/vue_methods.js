@@ -698,6 +698,10 @@ let vue_methods = {
       button.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
       
       previewContainer.classList.add('active', 'loading');
+      if (lang === 'mermaid'){
+        previewContainer.style.width =  '85vw';
+      }
+      
       // 渲染内容
       requestAnimationFrame(() => {
         try {
@@ -713,7 +717,7 @@ let vue_methods = {
               // Mermaid渲染完成后调整高度
               const svg = previewContainer.querySelector('svg');
               if (svg) {
-                previewContainer.style.minHeight = svg.getBBox().height + 50 + 'px';
+                previewContainer.style.minHeight = svg.getBBox().height + 'px';
               }
             });
           }
