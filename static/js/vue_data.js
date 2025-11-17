@@ -155,6 +155,7 @@ let vue_data = {
     showStickerPacksDialog: false,
     showGsvRefAudioPathDialog: false,
     showModelDialog: false,
+    showLogoDialog: false,
     deletingConversationId: null, // 正在被删除的对话ID
     jsonFile: null,
     models: [],
@@ -1602,13 +1603,13 @@ docker run -d \\
 `,
     browserEmbedCodeExamples: `<div id="super-agent-party">
   <iframe 
-    src="${backendURL}/" 
+    src="${backendURL}/chat.html" 
     width="100%" 
     height="100%"
     frameborder="0" 
     allowfullscreen>
   </iframe>
-  <p>Powered By<a href="${backendURL}/">Super Agent Party</a></p>
+  <p>Powered By<a href="${backendURL}/chat.html">Super Agent Party</a></p>
 </div>`,
     codeExamples: {
       python: `from openai import OpenAI
