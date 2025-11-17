@@ -1153,6 +1153,7 @@ key3`,
         "systemProxy": "跟随系统代理",
         "manualProxy": "手动代理",
         "noneProxy": "不使用代理",
+        'logoPage': 'Logo页',
     },
     'en-US': {
         'chat': 'Chat',
@@ -2305,5 +2306,6 @@ Key3`,
         "systemProxy": "Follow system proxy",
         "manualProxy": "Manual proxy",
         "noneProxy": "No proxy",
+        'logoPage':'Logo Page'
     },
   };

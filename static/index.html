@@ -10491,27 +10491,6 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </div>
 
-                  <!-- 操作区 -->
-                  <div class="card-actions">
-                    <!-- 左侧按钮 -->
-                    <div class="left-actions">
-                      <!-- 未安装：显示安装按钮 -->
-                      <el-button
-                        v-if="!gitInstalled"
-                        type="primary"
-                        :loading="gitInstalling"
-                        @click="installGit"
-                      >
-                        <i class="fa-solid fa-download"></i>
-                        {{ t('installGit') }}
-                      </el-button>
-
-                      <!-- 已安装：空占位，保持左右结构一致（可选） -->
-                    </div>
-
-                    <!-- 右侧：已安装时可放“卸载”按钮（暂无可留空） -->
-                  </div>
-
                   <!-- 进度条：只在安装过程中出现 -->
                   <el-progress
                     v-if="gitInstalling && gitProgress > 0"
@@ -10639,27 +10618,6 @@ if ('serviceWorker' in navigator) {
                         {{ t('installed') }}
                       </el-tag>
                     </div>
-                  </div>
-
-                  <!-- 操作区 -->
-                  <div class="card-actions">
-                    <!-- 左侧按钮 -->
-                    <div class="left-actions">
-                      <!-- 未安装：显示安装按钮 -->
-                      <el-button
-                        v-if="!gitInstalled"
-                        type="primary"
-                        :loading="gitInstalling"
-                        @click="installGit"
-                      >
-                        <i class="fa-solid fa-download"></i>
-                        {{ t('installGit') }}
-                      </el-button>
-
-                      <!-- 已安装：空占位，保持左右结构一致（可选） -->
-                    </div>
-
-                    <!-- 右侧：已安装时可放“卸载”按钮（暂无可留空） -->
                   </div>
 
                   <!-- 进度条：只在安装过程中出现 -->
