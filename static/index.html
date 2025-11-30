@@ -9441,149 +9441,147 @@ if ('serviceWorker' in navigator) {
                               </template>
                             </el-alert>
                         </div>
-
-                        <!-- VRM模型上传对话框 -->
-                        <el-dialog
-                          v-model="showVrmModelDialog"
-                          :title="t('uploadVrmModel')"
-                          width="600px"
-                        >
-                          <div class="upload-container">
-                            <div
-                              class="drop-zone"
-                              @dragover.prevent
-                              @drop.prevent="handleVrmModelDrop"
-                              @click="browseVrmModelFile"
-                            >
-                              <el-icon :size="50"><i class="fa-solid fa-upload"></i></el-icon>
-                              <p>{{ t('clickOrDropVrm') }}</p>
-                            </div>
-                            
-                            <!-- 文件列表 -->
-                            <div class="compact-file-list" v-if="newVrmModel.name">
-                              <div class="compact-file-item">
-                                <span class="file-name">{{ newVrmModel.name }}</span>
-                                <el-button
-                                  @click.stop="removeNewVrmModel"
-                                  class="delete-icon"
-                                  circle
-                                >
-                                  <i class="fa-solid fa-trash"></i>
-                                </el-button>
-                              </div>
-                            </div>
-
-                            <el-input
-                              v-model="newVrmModel.displayName"
-                              :label="t('modelDisplayName')"
-                              :placeholder="t('modelDisplayNamePlaceholder')"
-                              required
-                            />
-                          </div>
-                          <template #footer>
-                            <el-button @click="cancelVrmModelUpload">{{ t('cancel') }}</el-button>
-                            <el-button type="primary" @click="uploadVrmModel" :disabled="!newVrmModel.name">
-                              {{ t('createImmediately') }}
-                            </el-button>
-                          </template>
-                        </el-dialog>
-
-                        <!-- VRMA动作上传对话框 -->
-                        <el-dialog
-                          v-model="showVrmaMotionDialog"
-                          :title="t('uploadVrmaMotion')"
-                          width="600px"
-                        >
-                          <div class="upload-container">
-                            <div
-                              class="drop-zone"
-                              @dragover.prevent
-                              @drop.prevent="handleVrmaMotionDrop"
-                              @click="browseVrmaMotionFile"
-                            >
-                              <el-icon :size="50"><i class="fa-solid fa-upload"></i></el-icon>
-                              <p>{{ t('clickOrDropVrma') }}</p>
-                            </div>
-                            
-                            <!-- 文件列表 -->
-                            <div class="compact-file-list" v-if="newVrmaMotion.name">
-                              <div class="compact-file-item">
-                                <span class="file-name">{{ newVrmaMotion.name }}</span>
-                                <el-button
-                                  @click.stop="removeNewVrmaMotion"
-                                  class="delete-icon"
-                                  circle
-                                >
-                                  <i class="fa-solid fa-trash"></i>
-                                </el-button>
-                              </div>
-                            </div>
-
-                            <el-input
-                              v-model="newVrmaMotion.displayName"
-                              :label="t('motionDisplayName')"
-                              :placeholder="t('motionDisplayNamePlaceholder')"
-                              required
-                            />
-                          </div>
-                          <template #footer>
-                            <el-button @click="cancelVrmaMotionUpload">{{ t('cancel') }}</el-button>
-                            <el-button type="primary" @click="uploadVrmaMotion" :disabled="!newVrmaMotion.name">
-                              {{ t('createImmediately') }}
-                            </el-button>
-                          </template>
-                        </el-dialog>
-
-                        <!-- 高斯场景上传对话框  GAUSS -->
-                        <el-dialog
-                          v-model="showGaussSceneDialog"
-                          :title="t('uploadGaussScene')"
-                          width="600px"
-                        >
-                          <div class="upload-container">
-                            <div
-                              class="drop-zone"
-                              @dragover.prevent
-                              @drop.prevent="handleGaussSceneDrop"
-                              @click="browseGaussSceneFile"
-                            >
-                              <el-icon :size="50"><i class="fa-solid fa-upload"></i></el-icon>
-                              <p>{{ t('clickOrDropGaussScene') }}</p>
-                            </div>
-                            
-                            <!-- 文件列表 -->
-                            <div class="compact-file-list" v-if="newGaussScene.name">
-                              <div class="compact-file-item">
-                                <span class="file-name">{{ newGaussScene.name }}</span>
-                                <el-button
-                                  @click.stop="removeNewGaussScene"
-                                  class="delete-icon"
-                                  circle
-                                >
-                                  <i class="fa-solid fa-trash"></i>
-                                </el-button>
-                              </div>
-                            </div>
-
-                            <el-input
-                              v-model="newGaussScene.displayName"
-                              :label="t('GaussSceneDisplayName')"
-                              :placeholder="t('GaussSceneDisplayNamePlaceholder')"
-                              required
-                            />
-                          </div>
-                          <template #footer>
-                            <el-button @click="cancelGaussSceneUpload">{{ t('cancel') }}</el-button>
-                            <el-button type="primary" @click="uploadGaussScene" :disabled="!newGaussScene.name">
-                              {{ t('createImmediately') }}
-                            </el-button>
-                          </template>
-                        </el-dialog>
-
-
                       </div>
                     </el-form>
                   </div>
+
+                  <!-- VRM模型上传对话框 -->
+                  <el-dialog
+                    v-model="showVrmModelDialog"
+                    :title="t('uploadVrmModel')"
+                    width="600px"
+                  >
+                    <div class="upload-container">
+                      <div
+                        class="drop-zone"
+                        @dragover.prevent
+                        @drop.prevent="handleVrmModelDrop"
+                        @click="browseVrmModelFile"
+                      >
+                        <el-icon :size="50"><i class="fa-solid fa-upload"></i></el-icon>
+                        <p>{{ t('clickOrDropVrm') }}</p>
+                      </div>
+                      
+                      <!-- 文件列表 -->
+                      <div class="compact-file-list" v-if="newVrmModel.name">
+                        <div class="compact-file-item">
+                          <span class="file-name">{{ newVrmModel.name }}</span>
+                          <el-button
+                            @click.stop="removeNewVrmModel"
+                            class="delete-icon"
+                            circle
+                          >
+                            <i class="fa-solid fa-trash"></i>
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <el-input
+                        v-model="newVrmModel.displayName"
+                        :label="t('modelDisplayName')"
+                        :placeholder="t('modelDisplayNamePlaceholder')"
+                        required
+                      />
+                    </div>
+                    <template #footer>
+                      <el-button @click="cancelVrmModelUpload">{{ t('cancel') }}</el-button>
+                      <el-button type="primary" @click="uploadVrmModel" :disabled="!newVrmModel.name">
+                        {{ t('createImmediately') }}
+                      </el-button>
+                    </template>
+                  </el-dialog>
+
+                  <!-- VRMA动作上传对话框 -->
+                  <el-dialog
+                    v-model="showVrmaMotionDialog"
+                    :title="t('uploadVrmaMotion')"
+                    width="600px"
+                  >
+                    <div class="upload-container">
+                      <div
+                        class="drop-zone"
+                        @dragover.prevent
+                        @drop.prevent="handleVrmaMotionDrop"
+                        @click="browseVrmaMotionFile"
+                      >
+                        <el-icon :size="50"><i class="fa-solid fa-upload"></i></el-icon>
+                        <p>{{ t('clickOrDropVrma') }}</p>
+                      </div>
+                      
+                      <!-- 文件列表 -->
+                      <div class="compact-file-list" v-if="newVrmaMotion.name">
+                        <div class="compact-file-item">
+                          <span class="file-name">{{ newVrmaMotion.name }}</span>
+                          <el-button
+                            @click.stop="removeNewVrmaMotion"
+                            class="delete-icon"
+                            circle
+                          >
+                            <i class="fa-solid fa-trash"></i>
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <el-input
+                        v-model="newVrmaMotion.displayName"
+                        :label="t('motionDisplayName')"
+                        :placeholder="t('motionDisplayNamePlaceholder')"
+                        required
+                      />
+                    </div>
+                    <template #footer>
+                      <el-button @click="cancelVrmaMotionUpload">{{ t('cancel') }}</el-button>
+                      <el-button type="primary" @click="uploadVrmaMotion" :disabled="!newVrmaMotion.name">
+                        {{ t('createImmediately') }}
+                      </el-button>
+                    </template>
+                  </el-dialog>
+
+                  <!-- 高斯场景上传对话框  GAUSS -->
+                  <el-dialog
+                    v-model="showGaussSceneDialog"
+                    :title="t('uploadGaussScene')"
+                    width="600px"
+                  >
+                    <div class="upload-container">
+                      <div
+                        class="drop-zone"
+                        @dragover.prevent
+                        @drop.prevent="handleGaussSceneDrop"
+                        @click="browseGaussSceneFile"
+                      >
+                        <el-icon :size="50"><i class="fa-solid fa-upload"></i></el-icon>
+                        <p>{{ t('clickOrDropGaussScene') }}</p>
+                      </div>
+                      
+                      <!-- 文件列表 -->
+                      <div class="compact-file-list" v-if="newGaussScene.name">
+                        <div class="compact-file-item">
+                          <span class="file-name">{{ newGaussScene.name }}</span>
+                          <el-button
+                            @click.stop="removeNewGaussScene"
+                            class="delete-icon"
+                            circle
+                          >
+                            <i class="fa-solid fa-trash"></i>
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <el-input
+                        v-model="newGaussScene.displayName"
+                        :label="t('GaussSceneDisplayName')"
+                        :placeholder="t('GaussSceneDisplayNamePlaceholder')"
+                        required
+                      />
+                    </div>
+                    <template #footer>
+                      <el-button @click="cancelGaussSceneUpload">{{ t('cancel') }}</el-button>
+                      <el-button type="primary" @click="uploadGaussScene" :disabled="!newGaussScene.name">
+                        {{ t('createImmediately') }}
+                      </el-button>
+                    </template>
+                  </el-dialog>
 
                   <!-- 朗读页面 -->
                   <div v-show="subMenu === 'read_bot'">
