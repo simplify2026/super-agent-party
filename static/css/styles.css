@@ -4454,3 +4454,15 @@ body {
   /* 确保内部 input 标签本身背景透明，透出 wrapper 的颜色 */
   background-color: transparent !important; 
 }
+
+/* 修复供应商卡片选中状态被覆盖的问题 */
+.vendor-card.selected {
+  border-color: var(--el-color-primary) !important;
+  background-color: var(--el-color-primary-light-9) !important; /* 建议使用 light-9 或 light-7，视主题深浅调整 */
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset !important; /* 可选：增加内描边增强选中感 */
+}
+
+/* 暗色模式下的选中状态适配 */
+[data-theme="dark"] .vendor-card.selected {
+  background-color: rgba(var(--el-color-primary-rgb), 0.2) !important;
+}
