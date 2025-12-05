@@ -153,6 +153,9 @@ const app = Vue.createApp({
     });
   }, 1000); 
     this.scanExtensions(); // 扫描扩展
+    if (this.ttsSettings && this.ttsSettings.engine === 'systemtts') {
+      this.fetchSystemVoices();
+    }
   },
   beforeUnmount() {
     clearInterval(this.nodeTimer);
@@ -171,6 +174,14 @@ const app = Vue.createApp({
     window.removeEventListener('resize', this.handleResize);
   },
   watch: {
+    'ttsSettings.engine': function(newVal) {
+      if (newVal === 'systemtts') {
+        // 如果列表为空，则去获取
+        if (this.systemVoices.length === 0) {
+          this.fetchSystemVoices();
+        }
+      }
+    },
     'readConfig.longText': {
       immediate: true,
       async handler(val) {          // ← 加 async

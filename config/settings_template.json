@@ -261,6 +261,8 @@
       "customTTSspeaker": "",
       "customTTSSpeed": 1.0,
       "customStream": false,
+      "systemVoiceName": null,
+      "systemRate": 200,
       "newtts":{}
     },
     "largeMoreButtonDict":[
