@@ -1219,6 +1219,7 @@ if ('serviceWorker' in navigator) {
                   :min="1"
                   :max="20"
                   :step="1"
+                  show-input
                   @input="autoSaveSettings"
                 />
               </el-form-item>
@@ -1564,6 +1565,7 @@ if ('serviceWorker' in navigator) {
                               :min="1"
                               :max="20"
                               :step="1"
+                              show-input
                               @input="autoSaveSettings"
                             />
                           </el-form-item>
@@ -2378,6 +2380,7 @@ if ('serviceWorker' in navigator) {
                     <el-form-item :label="t('ttsEngine')" class="form-item-align">
                       <el-select v-model="newTTSConfig.engine" class="full-width-input">
                         <el-option :label="t('edgetts')" value="edgetts"></el-option>
+                        <el-option :label="t('systemtts')" value="systemtts" ></el-option>
                         <el-option label="GPT Sovits" value="GSV"></el-option>
                         <el-option :label="t('openaiLike')" value="openai"></el-option>
                         <el-option :label="t('customTTS')" value="customTTS"></el-option>
@@ -2403,6 +2406,68 @@ if ('serviceWorker' in navigator) {
                         </el-button>
                       </el-tooltip>
                     </el-form-item>
+
+                  <div class="tool-item" v-show="ttsSettings.engine === 'systemtts'">
+                    <div class="tool-header">
+                      <div class="header-left">
+                        <span>
+                          <el-icon>
+                            <i class="fa-solid fa-laptop-code"></i>
+                          </el-icon>
+                          {{t('sysTTS')}}
+                        </span>
+                      </div>
+                      <div class="header-right">
+                         <el-button link type="primary" @click="fetchSystemVoices" :loading="isLoadingSystemVoices">
+                            <i class="fa-solid fa-rotate-right"></i>
+                         </el-button>
+                      </div>
+                    </div>
+                    
+                    <div class="tool-content">
+                      <el-form-item :label="t('TTSRate')" class="form-item-align">
+                        <el-slider
+                          v-model="ttsSettings.systemRate"
+                          :min="50"
+                          :max="400"
+                          :step="10"
+                          show-input
+                          @change="autoSaveSettings">
+                        </el-slider>
+                      </el-form-item>
+
+                      <el-form-item :label="t('Timbre')" class="form-item-align">
+                        <el-select
+                          v-model="ttsSettings.systemVoiceName"
+                          class="full-width-input"
+                          :loading="isLoadingSystemVoices"
+                          @change="autoSaveSettings"
+                        >
+                          <el-option
+                            v-for="voice in systemVoices"
+                            :key="voice.id"
+                            :label="voice.name"
+                            :value="voice.id"
+                          >
+                            <span style="float: left">{{ voice.name }}</span>
+                            <span
+                              style="
+                                float: right;
+                                color: var(--el-text-color-secondary);
+                                font-size: 13px;
+                              "
+                            >
+                              {{ voice.lang }}
+                            </span>
+                          </el-option>
+                        </el-select>
+                      </el-form-item>
+                      
+                      <div v-if="systemVoices.length === 0 && !isLoadingSystemVoices" style="color: #e6a23c; font-size: 12px; margin-top: 5px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> {{t('noSystemVoiceDetected')}}
+                      </div>
+                    </div>
+                  </div>
 
                     <div class="tool-item" v-show="newTTSConfig.engine === 'openai'">
                       <div class="tool-header">
@@ -2497,6 +2562,7 @@ if ('serviceWorker' in navigator) {
                             :min="0.1"
                             :max="2"
                             :step="0.1"
+                            show-input
                             @change="autoSaveSettings">
                         </el-form-item>
                       </div>
@@ -2572,6 +2638,7 @@ if ('serviceWorker' in navigator) {
                             :min="0.1"
                             :max="2"
                             :step="0.1"
+                            show-input
                             @change="autoSaveSettings">
                         </el-form-item>
                       </div>
@@ -2596,6 +2663,7 @@ if ('serviceWorker' in navigator) {
                             :min="0.1"
                             :max="2"
                             :step="0.1"
+                            show-input
                             @change="autoSaveSettings">
                         </el-form-item>
                         <!-- 语言选择框 -->
@@ -2684,6 +2752,7 @@ if ('serviceWorker' in navigator) {
                             :min="0.1"
                             :max="2"
                             :step="0.1"
+                            show-input
                             @change="autoSaveSettings">
                         </el-form-item>
 
@@ -2693,6 +2762,7 @@ if ('serviceWorker' in navigator) {
                             :min="1"
                             :max="16"
                             :step="1"
+                            show-input
                             @change="autoSaveSettings">
                         </el-form-item>                       
 
@@ -2850,6 +2920,7 @@ if ('serviceWorker' in navigator) {
                           :min="450"
                           :max="2560"
                           :step="10"
+                          show-input
                           @change="autoSaveSettings"
                         />
                       </el-form-item>
@@ -2859,6 +2930,7 @@ if ('serviceWorker' in navigator) {
                           :min="450"
                           :max="2560"
                           :step="10"
+                          show-input
                           @change="autoSaveSettings"
                         />
                       </el-form-item>
@@ -3193,6 +3265,7 @@ if ('serviceWorker' in navigator) {
                                   :min="10"
                                   :max="600"
                                   :step="5"
+                                  show-input
                                   @change="autoSaveSettings">
                                 </el-slider>
                               </el-form-item>
@@ -3220,6 +3293,7 @@ if ('serviceWorker' in navigator) {
                                   :min="1"
                                   :max="100"
                                   :step="1"
+                                  show-input
                                   @change="resetCycleTimers();autoSaveSettings()">
                                 </el-slider>
                               </el-form-item>
@@ -3728,6 +3802,7 @@ if ('serviceWorker' in navigator) {
                           :min="0"
                           :max="1"
                           :step="0.1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -3737,6 +3812,7 @@ if ('serviceWorker' in navigator) {
                           :min="0"
                           :max="1"
                           :step="0.1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -3746,6 +3822,7 @@ if ('serviceWorker' in navigator) {
                           :min="0"
                           :max="128000"
                           :step="1024"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -3755,6 +3832,7 @@ if ('serviceWorker' in navigator) {
                           :min="0"
                           :max="1000"
                           :step="2"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -3975,6 +4053,7 @@ if ('serviceWorker' in navigator) {
                           :min="0"
                           :max="1"
                           :step="0.1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -3984,6 +4063,7 @@ if ('serviceWorker' in navigator) {
                           :min="0"
                           :max="128000"
                           :step="1024"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -4099,6 +4179,7 @@ if ('serviceWorker' in navigator) {
                           :min="0"
                           :max="1"
                           :step="0.1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -4206,6 +4287,7 @@ if ('serviceWorker' in navigator) {
                           :min="128"
                           :max="4096"
                           :step="64"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -4215,6 +4297,7 @@ if ('serviceWorker' in navigator) {
                           :min="128"
                           :max="4096"
                           :step="64"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -4702,6 +4785,7 @@ if ('serviceWorker' in navigator) {
                           class="full-width-input"
                         >
                           <el-option :label="t('edgetts')" value="edgetts" ></el-option>
+                          <el-option :label="t('systemtts')" value="systemtts" ></el-option>
                           <el-option label="GPT Sovits" value="GSV" ></el-option>
                           <el-option :label="t('openaiLike')" value="openai" ></el-option>
                           <el-option :label="t('customTTS')" value="customTTS" ></el-option>
@@ -4737,6 +4821,7 @@ if ('serviceWorker' in navigator) {
                         :min="1"
                         :max="16"
                         :step="1"
+                        show-input
                         @change="autoSaveSettings">
                     </el-form-item>
                     <el-form-item :label="t('bufferWord')">
@@ -4772,6 +4857,68 @@ if ('serviceWorker' in navigator) {
                     </el-form-item>
                     </div>
                   </div>
+                  <div class="tool-item" v-show="ttsSettings.engine === 'systemtts'">
+                    <div class="tool-header">
+                      <div class="header-left">
+                        <span>
+                          <el-icon>
+                            <i class="fa-solid fa-laptop-code"></i>
+                          </el-icon>
+                          {{t('sysTTS')}}
+                        </span>
+                      </div>
+                      <div class="header-right">
+                         <el-button link type="primary" @click="fetchSystemVoices" :loading="isLoadingSystemVoices">
+                            <i class="fa-solid fa-rotate-right"></i>
+                         </el-button>
+                      </div>
+                    </div>
+                    
+                    <div class="tool-content">
+                      <el-form-item :label="t('TTSRate')" class="form-item-align">
+                        <el-slider
+                          v-model="ttsSettings.systemRate"
+                          :min="50"
+                          :max="400"
+                          :step="10"
+                          show-input
+                          @change="autoSaveSettings">
+                        </el-slider>
+                      </el-form-item>
+
+                      <el-form-item :label="t('Timbre')" class="form-item-align">
+                        <el-select
+                          v-model="ttsSettings.systemVoiceName"
+                          class="full-width-input"
+                          :loading="isLoadingSystemVoices"
+                          @change="autoSaveSettings"
+                        >
+                          <el-option
+                            v-for="voice in systemVoices"
+                            :key="voice.id"
+                            :label="voice.name"
+                            :value="voice.id"
+                          >
+                            <span style="float: left">{{ voice.name }}</span>
+                            <span
+                              style="
+                                float: right;
+                                color: var(--el-text-color-secondary);
+                                font-size: 13px;
+                              "
+                            >
+                              {{ voice.lang }}
+                            </span>
+                          </el-option>
+                        </el-select>
+                      </el-form-item>
+                      
+                      <div v-if="systemVoices.length === 0 && !isLoadingSystemVoices" style="color: #e6a23c; font-size: 12px; margin-top: 5px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> {{t('noSystemVoiceDetected')}}
+                      </div>
+                    </div>
+                  </div>
+
                   <div class="tool-item" v-show="ttsSettings.engine === 'openai'">
                     <div class="tool-header">
                       <div class="header-left">
@@ -4865,6 +5012,7 @@ if ('serviceWorker' in navigator) {
                           :min="0.1"
                           :max="2"
                           :step="0.1"
+                          show-input
                           @change="autoSaveSettings">
                       </el-form-item>
                     </div>
@@ -4940,6 +5088,7 @@ if ('serviceWorker' in navigator) {
                           :min="0.1"
                           :max="2"
                           :step="0.1"
+                          show-input
                           @change="autoSaveSettings">
                       </el-form-item>
                     </div>
@@ -4964,6 +5113,7 @@ if ('serviceWorker' in navigator) {
                           :min="0.1"
                           :max="2"
                           :step="0.1"
+                          show-input
                           @change="autoSaveSettings">
                       </el-form-item>
                       <!-- 语言选择框 -->
@@ -5053,6 +5203,7 @@ if ('serviceWorker' in navigator) {
                           :min="0.1"
                           :max="2"
                           :step="0.1"
+                          show-input
                           @change="autoSaveSettings">
                       </el-form-item>
 
@@ -5062,6 +5213,7 @@ if ('serviceWorker' in navigator) {
                             :min="1"
                             :max="16"
                             :step="1"
+                            show-input
                             @change="autoSaveSettings">
                         </el-form-item>   
 
@@ -6084,6 +6236,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6117,6 +6270,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6158,6 +6312,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6201,6 +6356,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6253,6 +6409,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6305,6 +6462,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6349,6 +6507,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6393,6 +6552,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6436,6 +6596,7 @@ if ('serviceWorker' in navigator) {
                           :min="1"
                           :max="20"
                           :step="1"
+                          show-input
                           @input="autoSaveSettings"
                         />
                       </el-form-item>
@@ -6561,6 +6722,7 @@ if ('serviceWorker' in navigator) {
                               :min="1"
                               :max="20"
                               :step="1"
+                              show-input
                               @input="autoSaveSettings"
                             />
                           </el-form-item>
@@ -6877,6 +7039,7 @@ if ('serviceWorker' in navigator) {
                                 :min="512"
                                 :max="4096"
                                 :step="512"
+                                show-input
                                 @input="autoSaveSettings"
                               />
                             </el-form-item>
@@ -6886,6 +7049,7 @@ if ('serviceWorker' in navigator) {
                                 :min="128"
                                 :max="1024"
                                 :step="128"
+                                show-input
                                 @input="autoSaveSettings"
                               />
                             </el-form-item>
@@ -6895,6 +7059,7 @@ if ('serviceWorker' in navigator) {
                                 :min="1"
                                 :max="50"
                                 :step="1"
+                                show-input
                                 @input="autoSaveSettings"
                               />
                             </el-form-item>
@@ -6905,6 +7070,7 @@ if ('serviceWorker' in navigator) {
                                 :min="0"
                                 :max="1"
                                 :step="0.1"
+                                show-input
                                 @input="autoSaveSettings"
                                 style="flex: 1;"
                               ></el-slider>
@@ -8673,6 +8839,7 @@ if ('serviceWorker' in navigator) {
                                 :min="0"
                                 :max="1000"
                                 :step="2"
+                                show-input
                                 @input="autoSaveSettings"
                               />
                             </el-form-item>
@@ -8849,6 +9016,7 @@ if ('serviceWorker' in navigator) {
                               :min="0"
                               :max="1000"
                               :step="2"
+                              show-input
                               @input="autoSaveSettings"
                             />
                           </el-form-item>
@@ -9044,6 +9212,7 @@ if ('serviceWorker' in navigator) {
                               :min="0"
                               :max="1000"
                               :step="2"
+                              show-input
                               @input="autoSaveSettings"
                             />
                           </el-form-item>
@@ -9218,6 +9387,7 @@ if ('serviceWorker' in navigator) {
                               :min="0"
                               :max="1000"
                               :step="2"
+                              show-input
                               @input="autoSaveSettings"
                             />
                           </el-form-item>
@@ -9525,6 +9695,7 @@ if ('serviceWorker' in navigator) {
                                 :min="450"
                                 :max="2560"
                                 :step="10"
+                                show-input
                                 @change="autoSaveSettings"
                               />
                             </el-form-item>
@@ -9534,6 +9705,7 @@ if ('serviceWorker' in navigator) {
                                 :min="450"
                                 :max="2560"
                                 :step="10"
+                                show-input
                                 @change="autoSaveSettings"
                               />
                             </el-form-item>
@@ -10271,6 +10443,7 @@ if ('serviceWorker' in navigator) {
                                   :min="1"
                                   :max="30"
                                   :step="1"
+                                  show-input
                                   @change="autoSaveSettings"
                                 />
                               </el-form-item> 

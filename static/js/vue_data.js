@@ -541,6 +541,8 @@ let vue_data = {
       customTTSspeaker: "",
       customTTSspeed: 1.0,
       customStream: false,
+      systemVoiceName: null,
+      systemRate: 200,
       newtts:{}
     },
     activeTTSTab: 'default', // 控制 TTS 标签页切换
@@ -1715,4 +1717,6 @@ main();`,
     currentReadAudio: null,
     showLogDialog: false,
     logContent: '', // 日志内容
+    systemVoices: [],        // 存储从后端获取的音色列表
+    isLoadingSystemVoices: false, // 加载状态
 };

@@ -4977,13 +4977,193 @@ async def text_to_speech(request: Request):
                     "X-Audio-Format": target_format
                 }
             )
+        elif tts_engine == 'systemtts':
+            import pyttsx3
+            # ==========================================
+            # System TTS (pyttsx3) 引擎 - 修复版
+            # ==========================================
+            
+            # 获取配置参数
+            system_voice_name = tts_settings.get('systemVoiceName', None) # 指定语音ID/名称
+            system_rate = tts_settings.get('systemRate', 200)             # 语速
+            
+            # 移动端优化：适当降低语速
+            if mobile_optimized:
+                system_rate = int(system_rate * 0.95)
+            
+            # --- 定义同步合成函数 (将在线程中运行) ---
+            def sync_generate_wav(input_text: str, voice_name: str, rate: int, req_index: int) -> bytes:
+                """
+                同步执行pyttsx3合成，使用唯一文件名防止并发冲突。
+                """
+                # 初始化引擎
+                # 注意：pyttsx3在某些系统上初始化开销较大，但在线程中隔离比较安全
+                engine = pyttsx3.init()
+                
+                # 1. 设置参数
+                engine.setProperty('rate', rate)
+                
+                # 2. 设置音色 (尝试匹配名称)
+                if voice_name:
+                    voices = engine.getProperty('voices')
+                    for voice in voices:
+                        # 简单的模糊匹配，包含名称即可
+                        if voice_name.lower() in voice.name.lower() or voice_name == voice.id:
+                            engine.setProperty('voice', voice.id)
+                            break
+                
+                # 3. 生成唯一临时文件名
+                # 使用 UUID + index 确保绝对唯一，避免多线程写入同一个文件
+                unique_suffix = uuid.uuid4().hex[:8]
+                temp_filename = f"temp_tts_{req_index}_{unique_suffix}.wav"
+                
+                wav_data = b""
+                
+                try:
+                    # 4. 保存到临时文件 (这是阻塞操作)
+                    engine.save_to_file(input_text, temp_filename)
+                    engine.runAndWait()
+                    
+                    # 5. 读取文件内容到内存
+                    if os.path.exists(temp_filename):
+                        with open(temp_filename, 'rb') as f:
+                            wav_data = f.read()
+                    else:
+                        raise Exception("临时音频文件生成失败")
+                        
+                except Exception as e:
+                    print(f"[SystemTTS]合成出错: {str(e)}")
+                    raise e
+                finally:
+                    # 6. 【关键】清理临时文件
+                    # 无论成功还是失败，只要文件存在就删除
+                    if os.path.exists(temp_filename):
+                        try:
+                            os.remove(temp_filename)
+                        except Exception as cleanup_error:
+                            print(f"[SystemTTS]清理临时文件失败: {cleanup_error}")
+                            
+                return wav_data
 
+            # --- 异步生成器 ---
+            async def generate_audio():
+                try:
+                    # 将阻塞的合成函数放入线程池运行
+                    # 传入 index 用于生成文件名日志
+                    wav_content = await asyncio.to_thread(
+                        sync_generate_wav, 
+                        text, 
+                        system_voice_name, 
+                        system_rate, 
+                        index
+                    )
+                    
+                    if not wav_content:
+                        raise HTTPException(status_code=500, detail="SystemTTS 生成音频内容为空")
+
+                    # 格式转换逻辑
+                    if target_format == "opus":
+                        # 必须确保 convert_to_opus_simple 函数在上下文中可用
+                        # 这里假设它接收 wav bytes 并返回 opus bytes
+                        opus_audio = await convert_to_opus_simple(wav_content)
+                        final_audio = opus_audio
+                    else:
+                        # 默认为 wav
+                        final_audio = wav_content
+                    
+                    # 分块返回数据 (模拟流式)
+                    chunk_size = 4096
+                    for i in range(0, len(final_audio), chunk_size):
+                        yield final_audio[i:i + chunk_size]
+                        # 让出控制权，避免密集计算阻塞 Loop
+                        await asyncio.sleep(0) 
+                        
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"SystemTTS 处理失败: {str(e)}")
+
+            # --- 设置响应头 ---
+            if target_format == "opus":
+                media_type = "audio/ogg"
+                filename = f"tts_{index}.opus"
+            else:
+                media_type = "audio/wav"
+                filename = f"tts_{index}.wav"
+            
+            return StreamingResponse(
+                generate_audio(),
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f"inline; filename={filename}",
+                    "X-Audio-Index": str(index),
+                    "X-Audio-Format": target_format
+                }
+            )
 
         
         raise HTTPException(status_code=400, detail="不支持的TTS引擎")
     
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"服务器内部错误: {str(e)}"})
+
+@app.get("/system/voices")
+async def get_system_voices():
+    """
+    获取系统可用的 pyttsx3 音色列表。
+    返回格式适配前端下拉框组件。
+    """
+    import pyttsx3
+    # 定义同步函数，用于提取音色信息
+    def fetch_voices_sync():
+        try:
+            # 初始化引擎
+            # 注意：在某些服务器环境(无音频设备)下初始化可能会失败，需要捕获异常
+            engine = pyttsx3.init()
+            voices = engine.getProperty('voices')
+            
+            voice_list = []
+            for v in voices:
+                # 尝试获取语言信息，有些引擎返回的是列表，有些是字节
+                lang = "Unknown"
+                if hasattr(v, 'languages') and v.languages:
+                    # 处理不同平台返回的语言格式差异
+                    if isinstance(v.languages, list) and len(v.languages) > 0:
+                        lang = str(v.languages[0])
+                    else:
+                        lang = str(v.languages)
+
+                voice_list.append({
+                    "id": v.id,          # 传递给后端 TTS 接口的 value
+                    "name": v.name,      # 前端显示的 label
+                    "lang": lang,        # 辅助信息：语言
+                    "gender": getattr(v, 'gender', 'Unknown') # 辅助信息：性别（如果可用）
+                })
+            return voice_list
+            
+        except ImportError:
+            print("错误: 未找到 pyttsx3 驱动 (如 espeak, nsss, sapi5)")
+            return []
+        except RuntimeError as e:
+            print(f"pyttsx3 初始化失败: {str(e)}")
+            return []
+        except Exception as e:
+            print(f"获取系统音色未知错误: {str(e)}")
+            return []
+
+    try:
+        # 在线程池中运行，避免阻塞主进程
+        available_voices = await asyncio.to_thread(fetch_voices_sync)
+        
+        return {
+            "count": len(available_voices),
+            "voices": available_voices
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500, 
+            content={"error": f"无法获取音色列表: {str(e)}"}
+        )
 
 from pydub import AudioSegment
 from imageio_ffmpeg import get_ffmpeg_exe   # ① 关键：拿到捆绑的 ffmpeg
