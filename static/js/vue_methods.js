@@ -8477,7 +8477,7 @@ stopTTSActivities() {
     this.scrollToCurrentChunk(curIdx);
     try {
       this.currentReadAudio = new Audio(audioChunk.url);
-
+      this.currentReadAudio.volume = this.vrmOnline ? 0.0000001 : 1; // VRM在线时静音
       this.sendTTSStatusToVRM('startSpeaking', {
         audioDataUrl: this.cur_audioDatas[curIdx],
         chunkIndex: curIdx,
@@ -9705,6 +9705,7 @@ async doPlayAudio(url, idx, continuous = false) {
 
     const chunk = this.readState.audioChunks[idx];
     if (chunk.base64 == null) throw new Error('No base64');
+    this._curAudio.volume = this.vrmOnline ? 0.0000001 : 1; // VRM在线时静音
     this.sendTTSStatusToVRM('startSpeaking', {
       audioDataUrl: chunk.base64,
       chunkIndex: idx,
