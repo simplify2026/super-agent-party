@@ -5950,24 +5950,6 @@ handleCreateDiscordSeparator(val) {
       return { chunks, chunks_voice, remaining, remaining_voice };
     },
 
-    // util
-    escapeRegExp(string) {
-      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    },
-
-    // 辅助函数：检查字符串是否只包含标点符号和空白符以及表情
-    isOnlyPunctuationAndWhitespace(text) {
-      for (const exp of this.expressionMap) {
-        const regex = new RegExp(exp, 'g');
-        if (text.includes(exp)) {
-          text = text.replace(regex, '').trim(); // 移除表情标签
-        }
-      }
-      // 匹配只包含标点符号、空白符（空格、制表符、换行符等）的字符串
-      const punctuationAndWhitespaceRegex = /^[\s\p{P}]*$/u;
-      return punctuationAndWhitespaceRegex.test(text);
-    },
-
     // TTS处理进程 - 使用流式响应
     // 修改 TTS 处理开始时的通知
     async startTTSProcess() {
@@ -6057,22 +6039,13 @@ handleCreateDiscordSeparator(val) {
     async processTTSChunk(message, index) {
       const chunk = message.ttsChunks[index];
       const voice = message.chunks_voice[index];
-      const exps = [];
       let remainingText = chunk;
       let chunk_text = remainingText;
-      let chunk_expressions = exps;
+      let chunk_expressions = [];
       if (chunk.indexOf('<') !== -1){
-        // 包含表情
-        for (const exp of this.expressionMap) {
-          const regex = new RegExp(exp, 'g');
-          if (remainingText.includes(exp)) {
-            exps.push(exp);
-            remainingText = remainingText.replace(regex, '').trim(); // 移除表情标签
-          }
-        }
-        remainingText = remainingText.replace(/<[^>]+>/g, ''); // 移除HTML
-        chunk_text = remainingText;
-        chunk_expressions = exps;
+        const tagReg = /<[^>]+>/g;
+        chunk_expressions = (chunk.match(tagReg) || []).map(t => t.slice(1, -1)); 
+        chunk_text = chunk.replace(tagReg, '').trim();
       }
       console.log(`Processing TTS chunk ${index}:`, chunk_text ,"\nvoice:" ,voice);
       
@@ -7863,15 +7836,11 @@ resumeRead() {
         else{
           /* —— 与对话版完全一致的文本清洗 —— */
           let chunk_text = chunk;
-          const exps = [];
+          let  chunk_expressions = [];
           if (chunk.indexOf('<') !== -1) {
-            for (const exp of this.expressionMap) {
-              const regex = new RegExp(exp, 'g');
-              if (chunk.includes(exp)) {
-                exps.push(exp);
-                chunk_text = chunk_text.replace(regex, '').trim();
-              }
-            }
+              const tagReg = /<[^>]+>/g;
+              chunk_expressions = (chunk.match(tagReg) || []).map(t => t.slice(1, -1)); // 去掉两端的 <>
+              chunk_text = chunk.replace(tagReg, '').trim();
           }
 
           const res = await fetch('/tts', {
@@ -7901,7 +7870,7 @@ resumeRead() {
           /* 缓存两样东西 */
           this.readState.audioChunks[index] = {
             url,                       // 本地播放用
-            expressions: exps,
+            expressions: chunk_expressions,
             base64: this.cur_audioDatas[index], // VRM 播放用
             text: chunk_text,
             index,
@@ -7922,7 +7891,7 @@ resumeRead() {
         this.checkReadAudioPlayback();
       } catch (e) {
         console.error(`Read TTS chunk ${index} error`, e);
-        this.readState.audioChunks[index] = { url: null, expressions: exps, text: chunk_text, index };
+        this.readState.audioChunks[index] = { url: null, expressions: chunk_expressions, text: chunk_text, index };
         this.cur_audioDatas[index] = null;
         
         /* 新增: 处理错误时也增加计数 */
@@ -8374,15 +8343,11 @@ stopTTSActivities() {
       console.log(`Processing TTS chunk ${index}`);
       // 文本清洗
       let chunk_text = chunk;
-      const exps = [];
+      let chunk_expressions =[];
       if (chunk.indexOf('<') !== -1) {
-        for (const exp of this.expressionMap) {
-          const regex = new RegExp(exp, 'g');
-          if (chunk.includes(exp)) {
-            exps.push(exp);
-            chunk_text = chunk_text.replace(regex, '').trim();
-          }
-        }
+        const tagReg = /<[^>]+>/g;
+        chunk_expressions = (chunk.match(tagReg) || []).map(t => t.slice(1, -1)); // 去掉两端的 <>
+        chunk_text = chunk.replace(tagReg, '').trim(); // 把标签从正文里删掉
       }
 
       try {
@@ -8412,7 +8377,7 @@ stopTTSActivities() {
         /* 缓存两样东西 */
         this.readState.audioChunks[index] = {
           url,                       // 本地播放用
-          expressions: exps,
+          expressions: chunk_expressions,
           base64: this.cur_audioDatas[index], // VRM 播放用
           text: chunk_text,
           index,
@@ -8428,7 +8393,7 @@ stopTTSActivities() {
         console.error(`TTS chunk ${index} error`, e);
         this.readState.audioChunks[index] = { 
           url: null, 
-          expressions: exps, 
+          expressions: chunk_expressions, 
           text: chunk_text, 
           index 
         };
@@ -9731,15 +9696,11 @@ async synthSegment(idx) {
     const voice = this.readState.chunks_voice[idx] || 'default';
     /* —— 与对话版完全一致的文本清洗 —— */
     let chunk_text = text;
-    const exps = [];
+    let chunk_expressions =[];
     if (text.indexOf('<') !== -1) {
-      for (const exp of this.expressionMap) {
-        const regex = new RegExp(exp, 'g');
-        if (text.includes(exp)) {
-          exps.push(exp);
-          chunk_text = chunk_text.replace(regex, '').trim();
-        }
-      }
+      const tagReg = /<[^>]+>/g;
+      chunk_expressions = (text.match(tagReg) || []).map(t => t.slice(1, -1)); // 去掉两端的 <>
+      chunk_text = text.replace(tagReg, '').trim(); // 把标签从正文里删掉
     }
     const res = await fetch('/tts', {
       method : 'POST',
@@ -9762,7 +9723,7 @@ async synthSegment(idx) {
     /* 缓存两样东西 */
     this.readState.audioChunks[idx] = {
       url,                       // 本地播放用
-      expressions: exps,
+      expressions: chunk_expressions,
       base64: `data:${blob.type};base64,${base64}`, // VRM 播放用
       text: chunk_text,
       idx,
