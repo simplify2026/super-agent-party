@@ -1868,6 +1868,24 @@ function sendVMCBones() {
     const node = currentVrm.humanoid.getNormalizedBoneNode(name);
     if (!node || !node.position || !node.quaternion) continue;
 
+    let vmcRot = { x: 0, y: 0, z: 0, w: 1 };
+
+    if (isVRM1) {
+        // VRM 1.0 标准转换 (Three.js -> Unity/VMC)
+        // 通常是 X不变, Y反转, Z反转
+        vmcRot.x = node.quaternion.x;
+        vmcRot.y = -node.quaternion.y;
+        vmcRot.z = -node.quaternion.z;
+        vmcRot.w = node.quaternion.w;
+    } else {
+        // VRM 0.x 转换 (基于你的接收端逻辑逆推)
+        // 接收是 (-x, y, -z)，所以发送也是 (-x, y, -z)
+        vmcRot.x = -node.quaternion.x;
+        vmcRot.y = -node.quaternion.y; // 保持 Y 原样 (对应接收端的 y)
+        vmcRot.z = node.quaternion.z;
+        vmcRot.w = node.quaternion.w;
+    }
+
     window.vmcAPI.sendVMCBone({
       boneName: name,
       position: {
@@ -1875,12 +1893,7 @@ function sendVMCBones() {
         y: node.position.y,
         z: node.position.z
       },
-      rotation: {
-        x: node.quaternion.x,
-        y: - node.quaternion.y,
-        z: - node.quaternion.z,
-        w: node.quaternion.w
-      }
+      rotation: vmcRot
     });
   }
 }
@@ -1992,8 +2005,22 @@ function animate() {
                 }
 
                 // 2.3 真正写数据
-                node.position.copy(data.position);
-                node.quaternion.copy(data.rotation);
+                // 针对 VRM 0.x 修复骨骼方向相反的问题
+                if (isVRM1) {
+                    node.position.copy(data.position);
+                    node.quaternion.copy(data.rotation);
+                } else {
+                    node.position.copy(data.position);
+                    
+                    // 关键修复：只反转 Y 和 Z 轴的分量，保持 X 和 W 不变
+                    // 这样解决了“向前变向后”(Y轴) 和 “向上变向下”(Z轴) 的问题
+                    node.quaternion.set(
+                        -data.rotation.x,
+                        data.rotation.y, 
+                        -data.rotation.z,
+                        data.rotation.w
+                    );
+                }
             }
 
             /* ===== 3. 让 SpringBone / LookAt 等生效 ===== */
