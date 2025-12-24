@@ -6,9 +6,22 @@
   },
   "customizations": {
     "vscode": {
-      "settings": {},
-      "extensions": ["ms-python.python"]
+      "settings": {
+        // 让 VS Code 自动识别 Dockerfile 里装好的 Python 环境
+        "python.defaultInterpreterPath": "/app/.venv/bin/python"
+      },
+      "extensions": [
+        "ms-python.python"
+      ]
     }
   },
-  "forwardPorts": [3456]
+  "forwardPorts": [3456],
+  "portsAttributes": {
+    "3456": {
+      "label": "Super Agent Party App",
+      "onAutoForward": "notify"
+    }
+  },
+  // 关键点：这一行让 Codespaces 启动后自动运行你的服务
+  "postAttachCommand": "/app/.venv/bin/python server.py --host 0.0.0.0 --port 3456"
 }
