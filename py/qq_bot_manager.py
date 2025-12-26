@@ -417,7 +417,9 @@ class MyClient(botpy.Client):
             user_content = message.content
             
         print(f"User content: {user_content}")
-        
+
+        c_id = message.author.user_openid
+
         # 初始化状态管理
         if not hasattr(self, 'msg_seq_counters'):
             self.msg_seq_counters = {}
@@ -430,7 +432,6 @@ class MyClient(botpy.Client):
             "image_cache": []
         }
 
-        c_id = message.author.user_openid
         if c_id not in self.memoryList:
             self.memoryList[c_id] = []
             
