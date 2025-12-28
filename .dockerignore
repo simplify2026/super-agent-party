@@ -29,3 +29,6 @@ wxauto*
 static/ext/*
 
 .tio.tokens.json
+
+/build/
+/dist/

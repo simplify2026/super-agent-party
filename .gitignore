@@ -189,3 +189,6 @@ static/ext/*
 vrm/asr/
 
 .tio.tokens.json
+
+/build/
+/dist/
