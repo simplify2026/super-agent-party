@@ -2898,16 +2898,7 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                             )
                 yield "data: [DONE]\n\n"
                 if m0:
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": user_prompt,
-                        },
-                        {
-                            "role": "assistant",
-                            "content": full_content,
-                        }
-                    ]
+                    messages=f"用户说：{user_prompt}\n\n---\n\n你说：{full_content}"
                     executor = ThreadPoolExecutor()
                     async def add_async():
                         loop = asyncio.get_event_loop()
@@ -3818,16 +3809,7 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                 # 移除原内容中的标签部分
                 response_dict["choices"][0]['message']['content'] = re.sub(fr'{open_tag}(.*?)\{close_tag}', '', content, flags=re.DOTALL).strip()
         if m0:
-            messages=[
-                {
-                    "role": "user",
-                    "content": user_prompt,
-                },
-                {
-                    "role": "assistant",
-                    "content": response_dict["choices"][0]['message']['content'],
-                }
-            ]
+            messages=f"用户说：{user_prompt}\n\n---\n\n你说：{response_dict["choices"][0]['message']['content']}"
             executor = ThreadPoolExecutor()
             async def add_async():
                 loop = asyncio.get_event_loop()
@@ -3835,7 +3817,7 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                 metadata = {
                     "timetamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
-                func = partial(m0.add, user_id=memoryId,metadata=metadata)
+                func = partial(m0.add, user_id=memoryId,metadata=metadata,infer=False)
                 # 传递 messages 作为位置参数
                 await loop.run_in_executor(executor, func, messages)
                 print("知识库更新完成")
