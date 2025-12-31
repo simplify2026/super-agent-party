@@ -175,7 +175,7 @@ let vue_data = {
         enabled: false,
       },
       a2ui: {
-        enabled: true,
+        enabled: false,
       },
       time: {
         enabled: false,
