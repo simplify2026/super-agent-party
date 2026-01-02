@@ -3,6 +3,8 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, HttpUrl
 
+from py.load_files import sanitize_url
+
 router = APIRouter(prefix="/api", tags=["extra"])
 
 class EmbeddingDimsRequest(BaseModel):
@@ -19,8 +21,11 @@ async def get_embedding_dims(req: EmbeddingDimsRequest):
     用任意句子调一次嵌入接口，把返回向量的长度作为维度返回。
     兼容 OpenAI 官方以及任何「接口格式一致」的代理。
     """
-    url = str(req.base_url).rstrip("/") + "/embeddings" if req.base_url \
-          else "https://api.openai.com/v1/embeddings"
+    url = sanitize_url(
+        input_url=req.base_url, 
+        default_base="https://api.openai.com/v1", 
+        endpoint="/embeddings"
+    )
 
     payload = {"model": req.model, "input": "test"}
     headers = {"Authorization": f"Bearer {req.api_key}"}

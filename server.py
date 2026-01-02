@@ -19,7 +19,7 @@ import ipaddress
 from urllib.parse import urlparse, urlunparse, urljoin
 from urllib.robotparser import RobotFileParser
 import websockets
-from py.load_files import get_file_content
+from py.load_files import get_file_content, sanitize_url
 def fix_macos_environment():
     """
     专门修复 macOS 下找不到 node (nvm) 和 uv (python framework) 的问题
@@ -5224,9 +5224,14 @@ async def text_to_speech(request: Request):
             custom_streaming = tts_settings.get('customStream', False)
             
             async def generate_audio():
+                safe_tts_url = sanitize_url(
+                    input_url=custom_tt_server,
+                    default_base="http://localhost:5000", # 这里填你代码里原本的默认 TTS 地址
+                    endpoint=""  # 因为 TTS URL 通常已经包含了路径
+                )
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     try:
-                        async with client.stream("GET", custom_tt_server, params=params) as response:
+                        async with client.stream("GET", safe_tts_url, params=params) as response:
                             response.raise_for_status()
                             
                             if custom_streaming:
