@@ -1281,6 +1281,11 @@ let vue_methods = {
           }
 
         }
+        // 新增：处理工具输入
+        else if (data.type === 'update_user_input') {
+          this.userInput = data.data.text;
+          this.sendMessage(role = 'system')
+        }
         // 新增：处理关闭扩展侧边栏
         else if (data.type === 'trigger_close_extension') {
           console.log('关闭侧边栏')

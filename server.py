@@ -7469,6 +7469,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         "data": {"text": extension_system_prompt}
                     })
 
+            # 新增：处理扩展页面发送的工具结果并直接发送，不用额外触发send_message
+            elif data.get("type") == "set_tool_input":
+                tool_input = data.get("data", {}).get("text", "")
+                # 广播给所有连接的客户端
+                for connection in active_connections:
+                    await connection.send_json({
+                        "type": "update_tool_input",
+                        "data": {"text": tool_input}
+                    })
+
             # 新增：处理扩展页面发送的关闭窗口
             elif data.get("type") == "trigger_close_extension":
                 extension_system_prompt = data.get("data", {}).get("text", "")
