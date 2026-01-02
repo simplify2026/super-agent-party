@@ -14,6 +14,10 @@ import socket
 import sys
 import tempfile
 import httpx
+import socket
+import ipaddress
+from urllib.parse import urlparse, urlunparse, urljoin
+from urllib.robotparser import RobotFileParser
 import websockets
 from py.load_files import get_file_content
 def fix_macos_environment():
@@ -2917,7 +2921,6 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                 return
             except Exception as e:
                 logger.error(f"Error occurred: {e}")
-                import traceback
                 traceback.print_exc()
                 # 捕获异常并返回错误信息
                 error_chunk = {
@@ -4144,69 +4147,139 @@ async def simple_chat_endpoint(request: ChatRequest):
         headers={"Cache-Control": "no-cache"}
     )
 
-@app.api_route("/extension_proxy", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+# 建议 UA 包含项目地址
+USER_AGENT = "Mozilla/5.0 (compatible; OpenSourceProxyBot/1.0)"
+ROBOTS_CACHE = {}
+
+def is_private_ip(hostname):
+    """检测是否为私有/内网IP，放行代理软件的 Fake-IP (198.18.0.0/15)"""
+    if not hostname: return False
+    try:
+        addr_info = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+        fake_ip_net = ipaddress.ip_network('198.18.0.0/15')
+        for item in addr_info:
+            ip_str = item[4][0]
+            ip_obj = ipaddress.ip_address(ip_str)
+            if ip_obj in fake_ip_net: return False 
+            if ip_obj.is_private or ip_obj.is_loopback: return True
+    except:
+        return False
+    return False
+
+async def check_robots_txt(url):
+    """异步检查代理请求是否符合 robots.txt"""
+    parsed = urlparse(url)
+    # 内部地址跳过 robots.txt 检查
+    if parsed.hostname in ['127.0.0.1', 'localhost']: return True
+    
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+    if base_url in ROBOTS_CACHE:
+        return ROBOTS_CACHE[base_url].can_fetch(USER_AGENT, url)
+    
+    robots_url = urljoin(base_url, "/robots.txt")
+    rp = RobotFileParser()
+    try:
+        # 使用 httpx 获取 robots.txt
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(robots_url)
+            if resp.status_code == 200:
+                rp.parse(resp.text.splitlines())
+            else:
+                rp.allow_all = True
+    except:
+        rp.allow_all = True
+    ROBOTS_CACHE[base_url] = rp
+    return rp.can_fetch(USER_AGENT, url)
+
+# ================= 2. 修改后的代理路由 =================
+
+@app.api_route("/extension_proxy", methods=["GET", "POST"])
 async def extension_proxy_endpoint(request: Request):
     """
-    通用代理接口：支持任意 URL、Method、Headers
-    解决前端跨域问题 (CORS)
+    合规且安全的通用代理接口
     """
     url = request.query_params.get("url")
     if not url:
         return Response(content="Missing 'url' parameter", status_code=400)
 
-    # 获取请求方法
+    parsed_url = urlparse(url)
+    target_url = url
+    is_internal = False
+
+    # --- 策略 1: 路径合规判定 (只允许 uploaded_files 访问内网) ---
+    if 'uploaded_files' in parsed_url.path:
+        is_internal = True
+        # 强制路由到本地服务器
+        from py.get_setting import get_host, get_port
+        HOST, PORT = get_host(), get_port()
+        if HOST == '0.0.0.0': HOST = '127.0.0.1'
+        modified_parsed = parsed_url._replace(netloc=f'{HOST}:{PORT}')
+        target_url = urlunparse(modified_parsed)
+    else:
+        # --- 策略 2: 外部请求安全检查 ---
+        # A. SSRF 防护 (放行 Fake-IP 198.18.x.x)
+        if is_private_ip(parsed_url.hostname):
+            return Response(content="Security Block: Private IP access forbidden", status_code=403)
+        
+        # B. Robots.txt 协议合规检查
+        if not await check_robots_txt(url):
+            return Response(content="Compliance Block: Denied by robots.txt", status_code=403)
+
+    # --- 准备请求参数 ---
     method = request.method
-    
-    # 获取 Body (如果有)
     body = await request.body()
     
-    # 处理 Headers
-    # 1. 过滤掉 host, content-length 等可能导致冲突的头
-    # 2. 允许前端通过 query param 传递额外的 headers (JSON格式)，或者直接透传 header
-    excluded_headers = ['host', 'content-length', 'connection', 'accept-encoding']
+    # Header 处理
+    # 禁止前端透传某些敏感 Header
+    excluded_headers = {'host', 'content-length', 'connection', 'accept-encoding', 'cookie'}
     proxy_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": USER_AGENT,
+        "Accept": "*/*"
     }
-    
-    # 如果前端在 query 中传了 custom_headers (JSON字符串)
+
+    # 合并前端自定义 Header
     custom_headers_str = request.query_params.get("headers")
     if custom_headers_str:
         try:
-            proxy_headers.update(json.loads(custom_headers_str))
+            custom_data = json.loads(custom_headers_str)
+            for k, v in custom_data.items():
+                if k.lower() not in excluded_headers:
+                    proxy_headers[k] = v
         except:
             pass
 
-    # 打印调试日志
-    print(f"--- [Extension Proxy] ---")
-    print(f"Method: {method} | URL: {url}")
-    print(f"Proxy Headers: {proxy_headers}")
-
-    async with httpx.AsyncClient(verify=False, follow_redirects=True, timeout=30.0, trust_env=True) as client:
+    # --- 执行代理请求 ---
+    # verify=False 慎用，但在代理场景中为了兼容自签名证书有时需要
+    # follow_redirects=True 允许重定向
+    async with httpx.AsyncClient(verify=False, follow_redirects=True, timeout=30.0) as client:
         try:
             resp = await client.request(
                 method=method,
-                url=url,
+                url=target_url,
                 headers=proxy_headers,
                 content=body if body else None
             )
             
-            print(f"Response Status: {resp.status_code}")
-            
-            # 将响应透传回前端
-            # 注意：某些响应头可能需要过滤
+            # 过滤掉响应中的某些头，防止影响前端
+            safe_resp_headers = {}
+            for k, v in resp.headers.items():
+                if k.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
+                    safe_resp_headers[k] = v
+
+            # 注入 CORS 头确保前端能读到内容
+            safe_resp_headers["Access-Control-Allow-Origin"] = "*"
+
             return Response(
                 content=resp.content,
                 status_code=resp.status_code,
-                media_type=resp.headers.get("content-type", "application/octet-stream")
+                headers=safe_resp_headers,
+                media_type=resp.headers.get("content-type")
             )
 
         except Exception as e:
             err_msg = f"Proxy Error: {str(e)}"
-            print(f"[Extension Proxy Error] {err_msg}")
-            traceback.print_exc()
-            return Response(content=f"<error>{err_msg}</error>", status_code=502, media_type="text/plain")
-
-
+            return Response(content=err_msg, status_code=502)
+        
 # 存储活跃的ASR WebSocket连接
 asr_connections = []
 
@@ -4369,7 +4442,6 @@ async def funasr_recognize(audio_data: bytes, funasr_settings: dict,ws: WebSocke
             
     except Exception as e:
         print(f"FunASR recognition error: {e}")
-        import traceback
         traceback.print_exc()
         return f"FunASR识别错误: {str(e)}"
 
@@ -4603,7 +4675,6 @@ async def asr_websocket_endpoint(websocket: WebSocket):
                         print(f"ASR WebSocket disconnected: {connection_id}")
                     except Exception as e:
                         print(f"ASR WebSocket error: {e}")
-                        import traceback
                         traceback.print_exc()
     finally:
         # 清理资源
@@ -4694,7 +4765,6 @@ async def asr_transcription(
         
     except Exception as e:
         print(f"ASR HTTP interface error: {e}")
-        import traceback
         traceback.print_exc()
         
         return JSONResponse(
@@ -4801,7 +4871,6 @@ async def funasr_recognize_offline(audio_data: bytes, funasr_settings: dict) -> 
             
     except Exception as e:
         print(f"FunASR offline recognition error: {e}")
-        import traceback
         traceback.print_exc()
         return f"FunASR识别错误: {str(e)}"
 
