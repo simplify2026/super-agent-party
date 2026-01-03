@@ -5580,14 +5580,18 @@ async def text_to_speech(request: Request):
 async def get_system_voices():
     """
     获取系统可用的 pyttsx3 音色列表。
-    已针对 macOS 进行特殊过滤，去除特效音和不可用音色。
+    优化版：
+    1. 优先展示 Siri/Premium 高质量音色
+    2. 自动从 ID 中补全缺失的语言标识
+    3. 为高质量音色添加 [Siri] 前缀
     """
     import pyttsx3
+    import sys
+    import re
 
     def fetch_voices_sync():
         try:
-            # 1. 定义 macOS 特有的怪诞音色黑名单 (Novelty Voices)
-            # 这些音色通常是用来唱哥、发怪声的，不适合阅读文本
+            # 1. 仍然保留怪诞音色黑名单 (这些声音确实没法用)
             mac_novelty_voices = {
                 'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
                 'Deranged', 'Good News', 'Hysterical', 'Pipe Organ', 'Trinoids', 
@@ -5597,56 +5601,75 @@ async def get_system_voices():
             engine = pyttsx3.init()
             voices = engine.getProperty('voices')
             
-            voice_list = []
+            processed_voices = []
+
             for v in voices:
                 voice_name = v.name
-                voice_id = v.id
+                voice_id = str(v.id) # 确保是字符串
+                lower_id = voice_id.lower()
 
-                # -----------------------------
-                # macOS 专属过滤逻辑
-                # -----------------------------
+                # --- 过滤逻辑 ---
                 if sys.platform == 'darwin':
-                    # 过滤策略 A: 排除黑名单中的特效音
                     if voice_name in mac_novelty_voices:
                         continue
                     
-                    # 过滤策略 B: 排除 ID 中包含 'siri' 的音色
-                    # 原因：pyttsx3 基于旧版 NSSpeechSynthesizer，通常无法驱动 Siri 在线/神经音色，
-                    # 强行调用会导致静音或报错。建议只保留本地离线音色。
-                    if 'siri' in voice_id.lower():
-                        continue
-                        
-                    # 过滤策略 C (可选): 某些无效音色可能没有语言属性
-                    if not v.languages:
-                        continue
+                    # 【重要修改】不要再过滤 'siri' 了！
+                    # 我们只过滤那些完全无法使用的（通常 id 极其简短或是无效引用）
+                    # 但保留包含 'siri', 'premium', 'compact' 的 ID
 
-                # -----------------------------
-                # 通用：修复语言解析 (重点修复 Mac 返回 bytes 的问题)
-                # -----------------------------
+                # --- 语言解析逻辑 (增强版) ---
                 lang = "Unknown"
+                
+                # 优先尝试从 pyttsx3 属性获取
                 if hasattr(v, 'languages') and v.languages:
                     raw_lang = v.languages[0] if isinstance(v.languages, list) else v.languages
-                    
-                    # 处理 Mac 上可能返回 bytes 的情况 (如 b'\x05en_US')
                     if isinstance(raw_lang, bytes):
                         try:
-                            # 尝试解码，通常是 utf-8 或 mac-roman，这里简单处理转字符串
-                            lang = raw_lang.decode('utf-8', errors='ignore')
-                            # 移除可能存在的控制字符
-                            lang = ''.join([c for c in lang if c.isprintable()])
+                            lang = raw_lang.decode('utf-8', errors='ignore').replace('\x05', '')
                         except:
                             lang = str(raw_lang)
                     else:
                         lang = str(raw_lang)
 
-                voice_list.append({
+                # 【补全逻辑】如果属性里读不到语言，尝试从 ID 里正则提取
+                # macOS 的 ID 通常长这样: com.apple.speech.synthesis.voice.zh_CN.ting-ting.premium
+                if lang == "Unknown" or lang == "":
+                    # 匹配 .zh_CN. 或 .en_US. 这种模式
+                    match = re.search(r'\.([a-z]{2}[_-][A-Z]{2})\.', voice_id)
+                    if match:
+                        lang = match.group(1).replace('_', '-') # 统一格式为 zh-CN
+
+                # --- 判断是否为 Siri/高质量音色 ---
+                # 关键词：siri, premium (高品质), compact (压缩的高品质，通常是系统默认下载的)
+                is_high_quality = False
+                quality_tag = ""
+                
+                if any(k in lower_id for k in ['siri', 'premium', 'compact']):
+                    is_high_quality = True
+                    quality_tag = "[Siri/Premium] "
+                
+                # 有些系统直接在名字里就叫 "Siri Voice 1"
+                if "siri" in voice_name.lower():
+                    is_high_quality = True
+                    quality_tag = "[Siri] "
+
+                # 组装数据
+                processed_voices.append({
                     "id": voice_id,
-                    "name": voice_name,
+                    "name": f"{quality_tag}{voice_name}", # 在名字前加上标识，方便前端展示
+                    "original_name": voice_name,
                     "lang": lang,
-                    "gender": getattr(v, 'gender', 'Unknown')
+                    "gender": getattr(v, 'gender', 'Unknown'),
+                    "is_siri": is_high_quality # 用于排序的标记
                 })
-            
-            return voice_list
+
+            # --- 排序逻辑 ---
+            # Python 的 sort 是稳定的。
+            # key 解释: (not x['is_siri']) -> True(1) 排后面, False(0) 排前面
+            # 所以 is_siri=True 的会排在最前面
+            processed_voices.sort(key=lambda x: (not x['is_siri'], x['lang'], x['name']))
+
+            return processed_voices
             
         except ImportError:
             print("错误: 未找到 pyttsx3 驱动")
@@ -5662,8 +5685,8 @@ async def get_system_voices():
             "voices": available_voices
         }
     except Exception as e:
+        from fastapi.responses import JSONResponse
         return JSONResponse(status_code=500, content={"error": str(e)})
-    
 async def convert_to_opus_simple(audio_data):
     """使用pydub将音频转换为opus格式（适合飞书）"""
     from pydub import AudioSegment
