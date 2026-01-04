@@ -2484,7 +2484,19 @@ if ('serviceWorker' in navigator) {
                     <div class="tool-item" v-show="newTTSConfig.engine === 'azure'">
                       <div class="tool-header">
                         <div class="header-left">
-                          <span><i class="fa-brands fa-microsoft"></i> Azure TTS</span>
+                          <span><i class="fa-brands fa-microsoft"></i> 
+                            Azure TTS
+                            <el-link
+                              type="primary"
+                              :underline="false"
+                              href="https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices" 
+                              target="_blank"
+                            >
+                              <el-icon class="mr-1">
+                                <i class="fa-solid fa-key"></i>
+                              </el-icon>{{ t('getAPIkey') }}
+                            </el-link>
+                          </span>
                         </div>
                         <div class="header-right">
                           <el-button circle type="primary" @click="fetchTetosVoices('azure')">
@@ -2518,7 +2530,21 @@ if ('serviceWorker' in navigator) {
                     <!-- ================= Volcengine (火山) ================= -->
                     <div class="tool-item" v-show="newTTSConfig.engine === 'volcengine'">
                       <div class="tool-header">
-                        <div class="header-left"><span><i class="fa-solid fa-fire"></i> Volcengine</span></div>
+                        <div class="header-left">
+                          <span><i class="fa-solid fa-fire"></i> 
+                            Volcengine
+                            <el-link
+                              type="primary"
+                              :underline="false"
+                              href="https://console.volcengine.com/speech/service" 
+                              target="_blank"
+                            >
+                              <el-icon class="mr-1">
+                                <i class="fa-solid fa-key"></i>
+                              </el-icon>{{ t('getAPIkey') }}
+                            </el-link>
+                          </span>
+                        </div>
                         <div class="header-right">
                           <el-button circle type="primary" @click="fetchTetosVoices('volcengine')">
                             <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': newTTSConfig.isFetchingVoices }"></i>
@@ -2548,7 +2574,21 @@ if ('serviceWorker' in navigator) {
                     <!-- ================= Google TTS ================= -->
                     <div class="tool-item" v-show="newTTSConfig.engine === 'google'">
                       <div class="tool-header">
-                        <div class="header-left"><span><i class="fa-brands fa-google"></i> Google TTS</span></div>
+                        <div class="header-left">
+                          <span><i class="fa-brands fa-google"></i> 
+                            Google TTS
+                            <el-link
+                              type="primary"
+                              :underline="false"
+                              href="https://console.cloud.google.com/apis/library/texttospeech.googleapis.com" 
+                              target="_blank"
+                            >
+                              <el-icon class="mr-1">
+                                <i class="fa-solid fa-key"></i>
+                              </el-icon>{{ t('getAPIkey') }}
+                            </el-link>
+                          </span>
+                        </div>
                         <div class="header-right">
                           <el-button circle type="primary" @click="fetchTetosVoices('google')">
                             <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': newTTSConfig.isFetchingVoices }"></i>
@@ -2578,7 +2618,21 @@ if ('serviceWorker' in navigator) {
                     <!-- ================= Baidu TTS ================= -->
                     <div class="tool-item" v-show="newTTSConfig.engine === 'baidu'">
                       <div class="tool-header">
-                        <div class="header-left"><span><i class="fa-solid fa-paw"></i> Baidu TTS</span></div>
+                        <div class="header-left">
+                          <span><i class="fa-solid fa-paw"></i> 
+                            Baidu TTS
+                            <el-link
+                              type="primary"
+                              :underline="false"
+                              href="https://console.bce.baidu.com/ai/#/ai/speech/app/list" 
+                              target="_blank"
+                            >
+                              <el-icon class="mr-1">
+                                <i class="fa-solid fa-key"></i>
+                              </el-icon>{{ t('getAPIkey') }}
+                            </el-link>
+                          </span>
+                        </div>
                         <div class="header-right">
                           <el-button circle type="primary" @click="fetchTetosVoices('baidu')">
                             <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': newTTSConfig.isFetchingVoices }"></i>
@@ -2607,7 +2661,20 @@ if ('serviceWorker' in navigator) {
                     <!-- ================= Minimax ================= -->
                     <div class="tool-item" v-show="newTTSConfig.engine === 'minimax'">
                       <div class="tool-header">
-                        <div class="header-left"><span>Minimax</span></div>
+                        <div class="header-left">
+                          <span>Minimax
+                            <el-link
+                              type="primary"
+                              :underline="false"
+                              href="https://platform.minimaxi.com/user-center/basic-information" 
+                              target="_blank"
+                            >
+                              <el-icon class="mr-1">
+                                <i class="fa-solid fa-key"></i>
+                              </el-icon>{{ t('getAPIkey') }}
+                            </el-link>
+                          </span>
+                        </div>
                         <div class="header-right">
                           <el-button circle type="primary" @click="fetchTetosVoices('minimax')">
                             <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': newTTSConfig.isFetchingVoices }"></i>
@@ -2636,7 +2703,20 @@ if ('serviceWorker' in navigator) {
                     <!-- ================= Xunfei (讯飞) ================= -->
                     <div class="tool-item" v-show="newTTSConfig.engine === 'xunfei'">
                       <div class="tool-header">
-                        <div class="header-left"><span>Xunfei</span></div>
+                        <div class="header-left">
+                          <span>Xunfei
+                            <el-link
+                              type="primary"
+                              :underline="false"
+                              href="https://console.xfyun.cn/services/tts" 
+                              target="_blank"
+                            >
+                              <el-icon class="mr-1">
+                                <i class="fa-solid fa-key"></i>
+                              </el-icon>{{ t('getAPIkey') }}
+                            </el-link>
+                          </span>
+                        </div>
                         <div class="header-right">
                           <el-button circle type="primary" @click="fetchTetosVoices('xunfei')">
                             <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': newTTSConfig.isFetchingVoices }"></i>
@@ -2666,7 +2746,21 @@ if ('serviceWorker' in navigator) {
                     <!-- ================= Fish Audio ================= -->
                     <div class="tool-item" v-show="newTTSConfig.engine === 'fish'">
                       <div class="tool-header">
-                        <div class="header-left"><span><i class="fa-solid fa-fish"></i> Fish Audio</span></div>
+                        <div class="header-left">
+                          <span><i class="fa-solid fa-fish"></i> 
+                            Fish Audio
+                            <el-link
+                              type="primary"
+                              :underline="false"
+                              href="https://fish.audio/go-api" 
+                              target="_blank"
+                            >
+                              <el-icon class="mr-1">
+                                <i class="fa-solid fa-key"></i>
+                              </el-icon>{{ t('getAPIkey') }}
+                            </el-link>
+                          </span>
+                        </div>
                         <div class="header-right">
                           <el-button circle type="primary" @click="fetchTetosVoices('fish')">
                             <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': newTTSConfig.isFetchingVoices }"></i>
@@ -5374,10 +5468,24 @@ if ('serviceWorker' in navigator) {
                   </div>
 
 
-                  <!-- ================= Azure TTS ================= -->
+<!-- ================= Azure TTS ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'azure'">
                     <div class="tool-header">
-                      <div class="header-left"><span><i class="fa-brands fa-microsoft"></i> Azure TTS</span></div>
+                      <div class="header-left">
+                        <span><i class="fa-brands fa-microsoft"></i> 
+                          Azure TTS
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices" 
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-key"></i>
+                            </el-icon>{{ t('getAPIkey') }}
+                          </el-link>
+                        </span>
+                      </div>
                       <div class="header-right">
                         <el-button circle type="primary" @click="fetchTetosVoices('azure')">
                           <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': ttsSettings.isFetchingVoices }"></i>
@@ -5410,7 +5518,21 @@ if ('serviceWorker' in navigator) {
                   <!-- ================= Volcengine (火山) ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'volcengine'">
                     <div class="tool-header">
-                      <div class="header-left"><span><i class="fa-solid fa-fire"></i> Volcengine</span></div>
+                      <div class="header-left">
+                        <span><i class="fa-solid fa-fire"></i> 
+                          Volcengine
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://console.volcengine.com/speech/service" 
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-key"></i>
+                            </el-icon>{{ t('getAPIkey') }}
+                          </el-link>
+                        </span>
+                      </div>
                       <div class="header-right">
                         <el-button circle type="primary" @click="fetchTetosVoices('volcengine')">
                           <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': ttsSettings.isFetchingVoices }"></i>
@@ -5440,7 +5562,21 @@ if ('serviceWorker' in navigator) {
                   <!-- ================= Google TTS ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'google'">
                     <div class="tool-header">
-                      <div class="header-left"><span><i class="fa-brands fa-google"></i> Google TTS</span></div>
+                      <div class="header-left">
+                        <span><i class="fa-brands fa-google"></i> 
+                          Google TTS
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://console.cloud.google.com/apis/library/texttospeech.googleapis.com" 
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-key"></i>
+                            </el-icon>{{ t('getAPIkey') }}
+                          </el-link>
+                        </span>
+                      </div>
                       <div class="header-right">
                         <el-button circle type="primary" @click="fetchTetosVoices('google')">
                           <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': ttsSettings.isFetchingVoices }"></i>
@@ -5470,7 +5606,21 @@ if ('serviceWorker' in navigator) {
                   <!-- ================= Baidu TTS ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'baidu'">
                     <div class="tool-header">
-                      <div class="header-left"><span><i class="fa-solid fa-paw"></i> Baidu TTS</span></div>
+                      <div class="header-left">
+                        <span><i class="fa-solid fa-paw"></i> 
+                          Baidu TTS
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://console.bce.baidu.com/ai/#/ai/speech/app/list" 
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-key"></i>
+                            </el-icon>{{ t('getAPIkey') }}
+                          </el-link>
+                        </span>
+                      </div>
                       <div class="header-right">
                         <el-button circle type="primary" @click="fetchTetosVoices('baidu')">
                           <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': ttsSettings.isFetchingVoices }"></i>
@@ -5499,7 +5649,20 @@ if ('serviceWorker' in navigator) {
                   <!-- ================= Minimax ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'minimax'">
                     <div class="tool-header">
-                      <div class="header-left"><span>Minimax</span></div>
+                      <div class="header-left">
+                        <span>Minimax
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://platform.minimaxi.com/user-center/basic-information" 
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-key"></i>
+                            </el-icon>{{ t('getAPIkey') }}
+                          </el-link>
+                        </span>
+                      </div>
                       <div class="header-right">
                         <el-button circle type="primary" @click="fetchTetosVoices('minimax')">
                           <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': ttsSettings.isFetchingVoices }"></i>
@@ -5528,7 +5691,20 @@ if ('serviceWorker' in navigator) {
                   <!-- ================= Xunfei (讯飞) ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'xunfei'">
                     <div class="tool-header">
-                      <div class="header-left"><span>Xunfei</span></div>
+                      <div class="header-left">
+                        <span>Xunfei
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://console.xfyun.cn/services/tts" 
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-key"></i>
+                            </el-icon>{{ t('getAPIkey') }}
+                          </el-link>
+                        </span>
+                      </div>
                       <div class="header-right">
                         <el-button circle type="primary" @click="fetchTetosVoices('xunfei')">
                           <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': ttsSettings.isFetchingVoices }"></i>
@@ -5558,7 +5734,21 @@ if ('serviceWorker' in navigator) {
                   <!-- ================= Fish Audio ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'fish'">
                     <div class="tool-header">
-                      <div class="header-left"><span><i class="fa-solid fa-fish"></i> Fish Audio</span></div>
+                      <div class="header-left">
+                        <span><i class="fa-solid fa-fish"></i> 
+                          Fish Audio
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            href="https://fish.audio/go-api" 
+                            target="_blank"
+                          >
+                            <el-icon class="mr-1">
+                              <i class="fa-solid fa-key"></i>
+                            </el-icon>{{ t('getAPIkey') }}
+                          </el-link>
+                        </span>
+                      </div>
                       <div class="header-right">
                         <el-button circle type="primary" @click="fetchTetosVoices('fish')">
                           <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': ttsSettings.isFetchingVoices }"></i>
