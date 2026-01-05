@@ -11356,6 +11356,34 @@ async togglePlugin(plugin) {
     }
   },
 
+    handleMessageLinkClick(event) {
+        // 1. 如果你原有的 handleGlobalClick 有逻辑（比如点击空白处关闭菜单），在这里调用它
+        this.handleGlobalClick(event); 
+
+        if(isElectron){
+
+          const link = event.target.closest('a');
+
+          if (link && link.href) {
+              const href = link.href;
+
+              // 2. 过滤逻辑：只拦截 http/https 网络链接
+              if (href.startsWith('http') || href.startsWith('https')) {
+                  
+                  // ★ 关键：同时调用 stopPropagation 和 preventDefault
+                  event.preventDefault();  // 阻止链接默认跳转
+                  event.stopPropagation(); // 阻止事件继续传播
+                  
+                  // 3. 打开内部浏览器
+                  console.log('拦截到链接，正在内部浏览器打开:', href);
+                  this.openUrlInNewTab(href);
+              }
+          }
+        
+        }
+
+    },
+
   // 这里的逻辑跟您原来的 click 类似，只是参数变了
   async exportTable(btn, tableElement) {
     if (btn.disabled) return; // 防止重复点击
@@ -11653,6 +11681,24 @@ async togglePlugin(plugin) {
 
 
     // AI浏览器相关
+    openUrlInNewTab(url) {
+        // 如果 url 为空或者无效，可以做个判断，或者直接打开
+        if (!url) return;
+
+        const newTab = {
+            id: Date.now(),
+            title: 'Loading...',
+            url: url,
+            favicon: '',
+            isLoading: true,
+            canGoBack: false,
+            canGoForward: false
+        };
+        this.browserTabs.push(newTab);
+        this.switchTab(newTab.id);
+        this.activeMenu = 'ai-browser';
+    },
+
     // 切换标签
     switchTab(id) {
         this.currentTabId = id;

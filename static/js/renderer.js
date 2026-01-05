@@ -678,6 +678,13 @@ const app = Vue.createApp({
     this.disconnectWebSocket();
   },
   async mounted() {
+    // ★ 监听主进程发来的“开新标签”指令
+    if (window.electronAPI && window.electronAPI.onNewTab) {
+        window.electronAPI.onNewTab((url) => {
+            console.log('收到新标签页请求:', url);
+            this.openUrlInNewTab(url);
+        });
+    }
     await this.probeNode();
     await this.probeUv(); 
     await this.probeGit();

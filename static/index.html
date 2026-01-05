@@ -538,7 +538,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                 ref="chatAreaRef"
                 :class="{ collapsed: !chatAreaOpen }" 
                 v-show="chatAreaOpen">
-              <div class="messages-container" ref="messagesContainer"   v-if="!isCapsuleMode" @click="handleGlobalClick">
+              <div class="messages-container" ref="messagesContainer"   v-if="!isCapsuleMode" @click.capture="handleMessageLinkClick">
                 <div v-for="(message, index) in messages" :key="index" class="message" :class="message.role">
                   <div v-if="ttsSettings.enabled && message.role === 'assistant'" class="tts-controls">
                     <el-tooltip :content="message.isPlaying || false ? t('pause') : t('play')">

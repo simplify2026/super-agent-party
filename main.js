@@ -1415,33 +1415,38 @@ function updatecontextMenu() {
   ]);
 }
 
-app.on('web-contents-created', (e, webContents) => {
-  webContents.on('new-window', (event, url) => {
-  event.preventDefault();
-  shell.openExternal(url);
-  });
-});
+// app.on('web-contents-created', (e, webContents) => {
+//   webContents.on('new-window', (event, url) => {
+//   event.preventDefault();
+//   shell.openExternal(url);
+//   });
+// });
 
-// 禁用所有 WebContents 的前进/后退
-app.on('web-contents-created', (_event, wc) => {
-  // 1. 拦截鼠标侧键 / 触摸板手势
-  wc.on('input-event', (_ev, input) => {
-    // 浏览器侧键对应的 button 是 3（后退）和 4（前进）
+app.on('web-contents-created', (event, contents) => {
+  // 拦截所有新窗口请求（包括 <webview> 内部的 window.open 和 target="_blank"）
+  contents.setWindowOpenHandler((details) => {
+    const { url } = details;
+    
+    // 如果主窗口还在，就通知主窗口里的 Vue 页面去创建新标签
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('create-tab', url);
+    }
+    
+    // 坚决阻止 Electron 创建原生弹窗
+    return { action: 'deny' };
+  });
+
+  // (保留你原有的代码：拦截侧键后退等)
+  contents.on('input-event', (_ev, input) => {
     if (input.type === 'mouseDown' && (input.button === 3 || input.button === 4)) {
-      // 阻止默认行为（相当于把事件吃掉）
-      wc.stopNavigation();
-      return;
+      contents.stopNavigation();
     }
   });
-
-  // 2. 拦截 Alt+Left / Alt+Right 快捷键
-  wc.on('before-input-event', (_ev, input) => {
+  contents.on('before-input-event', (_ev, input) => {
     const { alt, key } = input;
     if (alt && (key === 'Left' || key === 'Right')) {
-      // 标记为已处理，Electron 就不会再分发
       input.preventDefault = true;
     }
   });
 });
-
 app.commandLine.appendSwitch('disable-http-cache');
