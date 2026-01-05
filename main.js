@@ -1,5 +1,5 @@
 const remoteMain = require('@electron/remote/main')
-const { app, BrowserWindow, ipcMain, screen, shell, dialog, Tray, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, shell, dialog, Tray, Menu, session} = require('electron')
 const { clipboard, nativeImage,desktopCapturer  } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
@@ -20,7 +20,7 @@ let isMac = process.platform === 'darwin';
 const vmcSendSocket = dgram.createSocket('udp4'); // 发送复用同一 socket
 const MAX_LOG_LINES = 2000; // 保留最近2000行日志
 let logBuffer = []; // 内存日志缓冲区
-
+let activeDownloads = new Map(); 
 function appendLogToBuffer(source, data) {
   const timestamp = new Date().toLocaleTimeString();
   const lines = data.toString().split(/\r?\n/);
@@ -330,6 +330,7 @@ function createSkeletonWindow() {
       webSecurity: false,
       devTools: isDev,
       partition: 'persist:main-session',
+      webviewTag: true,
     }
   })
 
@@ -495,9 +496,6 @@ async function startBackend() {
   }
 }
 
-
-
-
 // 修改等待后端函数
 async function waitForBackend() {
   const MAX_RETRIES = 200
@@ -521,6 +519,108 @@ async function waitForBackend() {
   }
   throw new Error('Backend failed to start')
 }
+
+// 通用下载处理函数
+function handleDownloadItem(event, item, webContents) {
+  // 获取主窗口用于发送消息
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+
+  const downloadId = Date.now().toString();
+  
+  // ★ 这里直接使用最上面定义的 activeDownloads
+  // 如果这里报错，说明你没在文件顶部加 let activeDownloads = new Map();
+  activeDownloads.set(downloadId, item);
+
+  const fileName = item.getFilename();
+  const filePath = item.getSavePath();
+
+  // 1. 发送开始事件
+  win.webContents.send('download-started', {
+      id: downloadId,
+      filename: fileName,
+      totalBytes: item.getTotalBytes(),
+      path: filePath
+  });
+
+  // 2. 监听状态更新
+  item.on('updated', (event, state) => {
+      if (state === 'interrupted') {
+          win.webContents.send('download-updated', { id: downloadId, state: 'interrupted' });
+      } else if (state === 'progressing') {
+          if (item.isPaused()) {
+              win.webContents.send('download-updated', { id: downloadId, state: 'paused' });
+          } else {
+              win.webContents.send('download-updated', {
+                  id: downloadId,
+                  state: 'progressing',
+                  receivedBytes: item.getReceivedBytes(),
+                  totalBytes: item.getTotalBytes(),
+                  progress: item.getTotalBytes() > 0 ? item.getReceivedBytes() / item.getTotalBytes() : 0
+              });
+          }
+      }
+  });
+
+  // 3. 监听完成
+  item.once('done', (event, state) => {
+      win.webContents.send('download-done', {
+          id: downloadId,
+          state: state,
+          path: item.getSavePath()
+      });
+      // 下载完成，移除引用
+      activeDownloads.delete(downloadId);
+  });
+}
+
+// 2. 修改监听函数，同时监听两个会话
+function setupDownloadListener(win) {
+    
+    // A. 监听主窗口默认会话 (用于应用自身的下载)
+    win.webContents.session.on('will-download', (event, item, webContents) => {
+        handleDownloadItem(win, event, item, webContents);
+    });
+
+    // B. ★★★ 关键修复：监听 Webview 的隔离会话 ★★★
+    // 这里的字符串必须和你 HTML 里 <webview partition="..."> 的值一模一样！
+    // 你之前的代码里写的是 'persist:browser-session'
+    const webviewSession = session.fromPartition('persist:browser-session');
+    
+    webviewSession.on('will-download', (event, item, webContents) => {
+        // 让主窗口 (win) 去通知渲染进程
+        handleDownloadItem(win, event, item, webContents);
+    });
+}
+
+
+// 处理前端发来的控制指令 (暂停/继续/取消)
+ipcMain.handle('download-control', (event, { id, action }) => {
+  // ★ 同样使用顶部的 activeDownloads
+  const item = activeDownloads.get(id);
+  
+  if (!item) {
+    console.log(`未找到下载任务 ID: ${id}`);
+    return;
+  }
+
+  switch (action) {
+    case 'pause':
+      if (!item.isPaused()) item.pause();
+      break;
+    case 'resume':
+      if (item.canResume()) item.resume();
+      break;
+    case 'cancel':
+      item.cancel();
+      break;
+  }
+});
+
+// 打开文件所在文件夹
+ipcMain.handle('show-item-in-folder', (event, filePath) => {
+    if(filePath) shell.showItemInFolder(filePath);
+});
 
 // 配置自动更新
 function setupAutoUpdater() {
@@ -581,6 +681,19 @@ ipcMain.handle('get-window-size', (event) => {
 // 只有在获得锁（第一个实例）时才执行初始化
 app.whenReady().then(async () => {
   try {
+    app.on('session-created', (sess) => {
+        // console.log('发现新 Session 创建:', sess.getUserAgent()); 
+        
+        // 给每一个新创建的会话（包括 webview 的）都挂上下载监听
+        sess.on('will-download', (event, item, webContents) => {
+            console.log('捕获到下载请求 (来自 Webview/Session):', item.getFilename());
+            handleDownloadItem(event, item, webContents);
+        });
+    });
+    session.defaultSession.on('will-download', (event, item, webContents) => {
+        console.log('捕获到下载请求 (来自主窗口):', item.getFilename());
+        handleDownloadItem(event, item, webContents);
+    });    
       // 默认配置
     global.vmcCfg = {
       receive: { enable: false, port: 39539,syncExpression: false },
@@ -1414,33 +1527,38 @@ function updatecontextMenu() {
   ]);
 }
 
-app.on('web-contents-created', (e, webContents) => {
-  webContents.on('new-window', (event, url) => {
-  event.preventDefault();
-  shell.openExternal(url);
-  });
-});
+// app.on('web-contents-created', (e, webContents) => {
+//   webContents.on('new-window', (event, url) => {
+//   event.preventDefault();
+//   shell.openExternal(url);
+//   });
+// });
 
-// 禁用所有 WebContents 的前进/后退
-app.on('web-contents-created', (_event, wc) => {
-  // 1. 拦截鼠标侧键 / 触摸板手势
-  wc.on('input-event', (_ev, input) => {
-    // 浏览器侧键对应的 button 是 3（后退）和 4（前进）
+app.on('web-contents-created', (event, contents) => {
+  // 拦截所有新窗口请求（包括 <webview> 内部的 window.open 和 target="_blank"）
+  contents.setWindowOpenHandler((details) => {
+    const { url } = details;
+    
+    // 如果主窗口还在，就通知主窗口里的 Vue 页面去创建新标签
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('create-tab', url);
+    }
+    
+    // 坚决阻止 Electron 创建原生弹窗
+    return { action: 'deny' };
+  });
+
+  // (保留你原有的代码：拦截侧键后退等)
+  contents.on('input-event', (_ev, input) => {
     if (input.type === 'mouseDown' && (input.button === 3 || input.button === 4)) {
-      // 阻止默认行为（相当于把事件吃掉）
-      wc.stopNavigation();
-      return;
+      contents.stopNavigation();
     }
   });
-
-  // 2. 拦截 Alt+Left / Alt+Right 快捷键
-  wc.on('before-input-event', (_ev, input) => {
+  contents.on('before-input-event', (_ev, input) => {
     const { alt, key } = input;
     if (alt && (key === 'Left' || key === 'Right')) {
-      // 标记为已处理，Electron 就不会再分发
       input.preventDefault = true;
     }
   });
 });
-
 app.commandLine.appendSwitch('disable-http-cache');

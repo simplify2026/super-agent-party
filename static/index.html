@@ -51,12 +51,90 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+// 2. 注册 Vue 自定义指令 (在您的 app.mount 之前或者组件 mixin 中)
+// 如果您用的是 Options API，可以直接放在 directives: { ... } 里，或者全局注册
+const StreamDirective = {
+  mounted(el, binding) {
+    el._markdownContent = '';
+    updateElement(el, binding.value, binding.arg); // binding.arg 可以传 formatMessage 函数
+  },
+  updated(el, binding) {
+    if (binding.value !== el._markdownContent) {
+      updateElement(el, binding.value, binding.arg);
+    }
+  }
+};
+
+// 核心渲染逻辑
+function updateElement(el, rawMarkdown, formatFn) {
+  el._markdownContent = rawMarkdown; // 缓存内容
+
+  // A. 表格补全逻辑 (防止解析抖动)
+  let contentToRender = rawMarkdown || '';
+  const lines = contentToRender.split('\n');
+  const lastLine = lines[lines.length - 1].trim();
+  // 如果最后一行看起来是未闭合的表格行，手动补全竖线
+  if (lastLine.startsWith('|') && !lastLine.endsWith('|') && !/^[|\s-:]+$/.test(lastLine)) {
+    contentToRender += ' |';
+  }
+
+  // B. 生成 HTML 字符串 (调用您原有的 formatMessage)
+  // 注意：这里假设 formatFn 是您组件里的 formatMessage 方法
+  // 如果 formatFn 不存在，退化为简单的 md.render
+  let newHtml = '';
+  if (typeof formatFn === 'function') {
+    newHtml = formatFn(contentToRender); 
+  } else if (window.md) {
+    newHtml = window.md.render(contentToRender);
+  }
+
+  // C. 构造新 DOM 树容器
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = newHtml;
+  
+  // D. 使用 morphdom 进行增量更新
+  // 这就是"丝滑"的关键：它只修改变动的部分，保留旧 DOM 的动画状态
+  morphdom(el, wrapper, {
+    childrenOnly: true, // 仅更新子节点
+    
+    // 性能优化：跳过不需要更新的节点
+    onBeforeElUpdated: (fromEl, toEl) => {
+      // 1. 保护 MathJax 公式不被重绘 (防止公式闪烁)
+      if (fromEl.classList.contains('MathJax') || fromEl.tagName === 'MJX-CONTAINER') {
+        return false; 
+      }
+      // 2. 保护代码块，如果内容没变就不动 (防止高亮丢失)
+      if (fromEl.tagName === 'PRE' && fromEl.isEqualNode(toEl)) {
+        return false;
+      }
+      return true;
+    },
+    
+    // 节点添加后的回调
+    onNodeAdded: (node) => {
+      // 可以在这里触发 highlight.js 或 mathjax 对新节点的渲染
+      if (node.tagName === 'PRE' && window.hljs) {
+         // hljs.highlightElement(node); // 如果 formatMessage 里没做，可以在这做
+      }
+    }
+  });
+
+  // E. 触发 MathJax 渲染 (Debounced)
+  // 建议在组件 methods 里定义一个防抖的 queueMathJax，这里简单模拟
+  if (window.MathJax) {
+    // 使用 Promise 队列防止冲突，这里简化处理
+    setTimeout(() => {
+      window.MathJax.typesetPromise([el]).catch(()=>{});
+    }, 50);
+  }
+}
   </script>
   <!-- Include markdown-it and highlight.js scripts -->
   <script src="libs/markdown-it.min.js"></script>
   <script src="libs/markdown-it-task-lists.min.js"></script>
   <script src="libs/markdown-it-footnote.min.js"></script>
   <script src="libs/markdown-it-container.min.js"></script>
+  <script src="libs/morphdom-umd.min.js"></script>
   <script src="libs/highlight.min.js"></script>
   <script src="js/locales.js"></script>
   <script src="libs/mermaid.min.js"></script>
@@ -99,6 +177,167 @@ if ('serviceWorker' in navigator) {
   <div id="app">
     <!-- 顶部栏 -->
     <el-header v-if="isElectron || isMobile" class="top-bar" height="30px">
+
+      <!-- ★ 新增：集成式浏览器顶栏 -->
+      <!-- style="margin-left: 78px" 实现了左侧留白，且该区域可拖拽 -->
+      <div 
+        v-if="activeMenu === 'ai-browser' && !isMobile" 
+        class="integrated-browser-bar"
+        :style="{ 'margin-left': isCollapse ? '50px':'186px'}" 
+      >
+        
+        <!-- 2. 标签栏 (边缘滚动容器) -->
+        <!-- 占据中间剩余空间 -->
+        <div 
+            class="integrated-tabs-container" 
+            ref="tabsContainerRef"
+            @mousemove="handleTabsMouseMove"
+            @mouseleave="stopEdgeScroll"
+        >
+            <div class="tabs-scroll-wrapper" ref="tabsWrapperRef">
+                <div 
+                    v-for="tab in browserTabs" 
+                    :key="tab.id"
+                    class="ib-tab"
+                    :class="{ 'active': currentTabId === tab.id }"
+                    @click="switchTab(tab.id)"
+                    @mousedown.middle="closeTab(tab.id, $event)"
+                >
+                    <div class="ib-tab-content">
+                        <span class="ib-icon" v-if="tab.isLoading"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                        <span class="ib-icon" v-else-if="tab.favicon"><img :src="tab.favicon" /></span>
+                        <span class="ib-icon" v-else><i class="fa-regular fa-compass"></i></span>
+                        <span class="ib-title">{{ tab.title || t('newTab') }}</span>
+                    </div>
+                    <span class="ib-close" @click.stop="closeTab(tab.id, $event)">
+                        <i class="fa-solid fa-xmark"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+        <!-- 1. 地址栏 (现在排在最左边) -->
+        <div class="integrated-address-bar">
+             <el-input 
+                v-model="urlInput" 
+                class="ib-input" 
+                :placeholder="t('searchOrUrl')"
+                @keyup.enter="handleUrlEnter"
+                @focus="$event.target.select()"
+            >
+                <template #prefix>
+                    <i class="fa-solid fa-lock" v-if="currentTab?.url.startsWith('https')" style="font-size: 10px;"></i>
+                    <i class="fa-solid fa-globe" v-else style="font-size: 10px;"></i>
+                </template>
+            </el-input>
+        </div>
+        <!-- 3. 右侧控制组：新建标签 + 导航按钮 -->
+        <!-- 放在一起 -->
+        <div class="browser-controls-group">
+            <!-- 新建标签 -->
+            <button class="ib-btn new-tab-plus" @click="addNewTab" :title="t('newTab')">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+            
+            <!-- 下载管理按钮 & 下拉框 -->
+            <div 
+                class="download-manager-wrapper"
+                @mouseenter="handleDropdownEnter" 
+                @mouseleave="handleDropdownLeave"
+            >
+                <!-- 触发按钮 -->
+                <button class="ib-btn" :class="{ 'active': showDownloadDropdown }" :title="t('downloads')">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    <!-- 进度小红点/进度条 (可选) -->
+                    <span v-if="activeDownloadCount > 0" class="download-badge"></span>
+                </button>
+
+                <!-- iOS 风格下拉框 -->
+                <transition name="dropdown-fade">
+                    <div class="ios-dropdown-panel" v-show="showDownloadDropdown">
+                        <div class="dropdown-header">
+                            <span>{{ t('downloads') || 'Downloads' }}</span>
+                            <span class="clear-btn" @click="clearFinishedDownloads" v-if="downloads.length > 0">{{ t('clear') || 'Clear' }}</span>
+                        </div>
+
+                        <!-- 空状态 -->
+                        <div v-if="downloads.length === 0" class="empty-state">
+                            <i class="fa-solid fa-box-open"></i>
+                            <p>{{ t('noDownloads') || 'No recent downloads' }}</p>
+                        </div>
+
+                        <!-- 下载列表 -->
+                        <div v-else class="download-list">
+                            <div v-for="item in downloads" :key="item.id" class="download-item">
+                                
+                                <!-- 图标 -->
+                                <div class="file-icon">
+                                    <i class="fa-solid fa-file"></i>
+                                </div>
+
+                                <!-- 信息区 -->
+                                <div class="file-info">
+                                    <div class="file-name" :title="item.filename">{{ item.filename }}</div>
+                                    
+                                    <!-- 进度条 (仅在下载中显示) -->
+                                    <div class="progress-bar-bg" v-if="item.state === 'progressing' || item.state === 'paused'">
+                                        <div class="progress-bar-fill" :style="{ width: (item.progress * 100) + '%' }"></div>
+                                    </div>
+
+                                    <!-- 状态文本 -->
+                                    <div class="file-meta">
+                                        <span v-if="item.state === 'completed'" class="success-text">{{ t('completed') || 'Done' }}</span>
+                                        <span v-else-if="item.state === 'cancelled'" class="error-text">{{ t('cancelled') || 'Cancelled' }}</span>
+                                        <span v-else-if="item.state === 'interrupted'" class="error-text">{{ t('failed') || 'Failed' }}</span>
+                                        <span v-else>
+                                            {{ formatBytes(item.receivedBytes) }} / {{ formatBytes(item.totalBytes) }}
+                                            <span v-if="item.state === 'paused'">({{ t('paused') || 'Paused' }})</span>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- 操作按钮区 -->
+                                <div class="item-actions">
+                                    <!-- 完成后：打开文件夹 -->
+                                    <button v-if="item.state === 'completed'" class="action-btn folder" @click="openFileFolder(item.path)" :title="t('openFolder')">
+                                        <i class="fa-regular fa-folder-open"></i>
+                                    </button>
+                                    
+                                    <!-- 下载中：暂停/开始 -->
+                                    <button v-if="item.state === 'progressing'" class="action-btn" @click="controlDownload(item.id, 'pause')" :title="t('pause')">
+                                        <i class="fa-solid fa-pause"></i>
+                                    </button>
+                                    <button v-if="item.state === 'paused'" class="action-btn" @click="controlDownload(item.id, 'resume')" :title="t('resume')">
+                                        <i class="fa-solid fa-play"></i>
+                                    </button>
+
+                                    <!-- 下载中：取消 / 完成后：移除记录 -->
+                                    <button class="action-btn delete" @click="handleStopOrRemove(item)" :title="t('cancel')">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
+            </div>
+
+            <!-- 导航按钮 -->
+            <button class="ib-btn" @click="browserGoBack" :disabled="!currentTab?.canGoBack" :title="t('back')">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <button class="ib-btn" @click="browserGoForward" :disabled="!currentTab?.canGoForward" :title="t('forward')">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button class="ib-btn" @click="browserReload" :title="t('reload')">
+                <i :class="currentTab?.isLoading ? 'fa-solid fa-xmark' : 'fa-solid fa-rotate-right'"></i>
+            </button>
+            <button class="ib-btn" @click="goHome" :title="t('home')">
+                <i class="fa-solid fa-house"></i>
+            </button>
+        </div>
+
+      </div>
+
       <div class="window-controls">
         <div v-show="!isAssistantMode&&!isMobile&&settings?.model!==''" class="model-info" @click="showModelDialog = true" >
           <el-tooltip :content="t('clickToSwitchModel')">
@@ -255,6 +494,12 @@ if ('serviceWorker' in navigator) {
                   <i class="fa-solid fa-robot"></i>
               </el-icon>
               <template #title>{{ t('deployBot') }}</template>
+          </el-menu-item>
+          <el-menu-item index="ai-browser" v-if="isElectron">
+            <el-icon>
+              <i class="fa-brands fa-chrome"></i>
+            </el-icon>
+            <template #title>{{ t('aiBrowser') }}</template>
           </el-menu-item>
           <el-menu-item index="api-group">
             <el-icon>
@@ -454,7 +699,7 @@ if ('serviceWorker' in navigator) {
                 ref="chatAreaRef"
                 :class="{ collapsed: !chatAreaOpen }" 
                 v-show="chatAreaOpen">
-              <div class="messages-container" ref="messagesContainer"   v-if="!isCapsuleMode">
+              <div class="messages-container" ref="messagesContainer"   v-if="!isCapsuleMode" @click.capture="handleMessageLinkClick">
                 <div v-for="(message, index) in messages" :key="index" class="message" :class="message.role">
                   <div v-if="ttsSettings.enabled && message.role === 'assistant'" class="tts-controls">
                     <el-tooltip :content="message.isPlaying || false ? t('pause') : t('play')">
@@ -512,20 +757,33 @@ if ('serviceWorker' in navigator) {
                     </div>
                     <!-- AI回复内容 -->
                     <div v-else-if="message.role === 'assistant'" class="markdown-body">
-                        <!-- 如果开启了 Briefly 模式 -->
-                        <div v-if="message.briefly" v-html="formatMessage(message.pure_content??message.content, index)"></div>
+                        <!-- Briefly 模式 (通常是静态的，可以用 v-html，或者也用 v-morph) -->
+                        <div 
+                            v-if="message.briefly" 
+                            v-html="formatMessage(message.pure_content??message.content, index)">
+                        </div>
                         
                         <!-- 正常模式：混合渲染 -->
                         <div v-else>
                             <template v-for="(segment, segIndex) in splitMessageContent(message.content)" :key="segIndex">
-                                <!-- 文本段：使用你原有的 formatMessage 处理 markdown/latex -->
+                                
+                                <!-- 🌟 重点修改这里 🌟 -->
+                                <!-- 1. 添加 class="streaming" 用于 CSS 光标特效 -->
+                                <!-- 2. 使用 v-morph 指令替代 v-html -->
+                                <!-- 3. 将 formatMessage 作为参数传递 (或者在指令内部直接调用全局的 md) -->
+                                <!-- 注意：我们需要传递一个箭头函数或者绑定上下文，让指令能调用 formatMessage -->
                                 <div 
                                     v-if="segment.type === 'text'" 
-                                    v-html="formatMessage(segment.content, index)"
-                                    style="display: inline;"
+                                    class="stream-content"
+                                    :class="{ 'streaming': isTyping && index === messages.length - 1 && segIndex === splitMessageContent(message.content).length - 1 }"
+                                    v-morph:format="segment.content" 
+                                    style="display: inline-block; width: 100%;"
                                 ></div>
+                                <!-- 如果您无法轻松传递 formatMessage 方法，请在指令 updateElement 中直接使用 window.md.render 
+                                    并把 formatMessage 中的后处理逻辑（如 latex 占位）移到 updateElement 中 
+                                -->
 
-                                <!-- UI段：渲染组件 -->
+                                <!-- UI段：渲染组件 (保持不变) -->
                                 <a2-u-i-renderer 
                                     v-else-if="segment.type === 'ui'"
                                     :config="segment.content"
@@ -533,9 +791,11 @@ if ('serviceWorker' in navigator) {
                                 ></a2-u-i-renderer>
                             </template>
                             
-                            <!-- 思考中 loading (保持原样) -->
-                            <div v-if="isTyping && index === messages.length - 1 && !message.content">
-                                <i class="fa-solid fa-spinner fa-spin"></i>
+                            <!-- 思考中 loading (保留，但 CSS 里的光标特效已经很强了，这个可以作为冗余) -->
+                            <div 
+                              v-if="isTyping && index === messages.length - 1 && !message.content" 
+                            >
+                              <i class="fa-solid fa-spinner fa-spin"></i>
                             </div>
                         </div>
                     </div>
@@ -5468,7 +5728,7 @@ if ('serviceWorker' in navigator) {
                   </div>
 
 
-<!-- ================= Azure TTS ================= -->
+                  <!-- ================= Azure TTS ================= -->
                   <div class="tool-item" v-show="ttsSettings.engine === 'azure'">
                     <div class="tool-header">
                       <div class="header-left">
@@ -5757,7 +6017,7 @@ if ('serviceWorker' in navigator) {
                     </div>
                     <div class="tool-content">
                       <el-form-item label="API Key" class="form-item-align"><el-input v-model="ttsSettings.fishApiKey" type="password" show-password @change="autoSaveSettings"/></el-form-item>
-                      <el-form-item label="Voice" class="form-item-align">
+                      <el-form-item :label="t('fishVoice')" class="form-item-align">
                         <el-select v-model="ttsSettings.fishVoice" filterable allow-create class="full-width-input" @change="autoSaveSettings">
                           <el-option 
                             v-for="(v, index) in ttsSettings.tetosVoices" 
@@ -12475,6 +12735,89 @@ if ('serviceWorker' in navigator) {
                 </el-form>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- AI Browser Container -->
+        <div v-show="activeMenu === 'ai-browser'" class="page ai-browser-container" v-if="isElectron">
+            
+
+          <!-- 2. 浏览器主体 -->
+          <div class="browser-body">
+              
+              <!-- Webview 容器 -->
+              <div 
+                  v-for="tab in browserTabs" 
+                  :key="tab.id" 
+                  class="webview-wrapper"
+                  v-show="currentTabId === tab.id && tab.url"
+              >
+                  <webview 
+                      :src="tab.url" 
+                      :id="'webview-' + tab.id"
+                      class="webview-element"
+                      allowpopups
+                      plugins
+                      partition="persist:browser-session"
+                      @did-start-loading="onDidStartLoading(tab.id)"
+                      @did-stop-loading="onDidStopLoading(tab.id)"
+                      @page-title-updated="onPageTitleUpdated(tab.id, $event)"
+                      @page-favicon-updated="onPageFaviconUpdated(tab.id, $event)"
+                      @new-window="onNewWindow(tab.id, $event)"
+                      @dom-ready="onDomReady(tab.id)"
+                  ></webview>
+              </div>
+
+              <!-- 3. 极简 IOS 风格欢迎页 -->
+              <div class="browser-welcome-page" v-if="currentTab && !currentTab.url">
+                  <div class="ios-welcome-container">
+                      
+                      <h1 class="ios-title">Welcome to Party</h1>
+                      
+                      <!-- 居中大搜索框 -->
+                      <div class="ios-search-wrapper" :class="{ 'focused': isSearchFocused }">
+                          <!-- 引擎切换器 (左侧) - 修改为悬浮触发 -->
+                          <div class="engine-selector" 
+                            @mouseenter="handleSelectorEnter" 
+                            @mouseleave="handleSelectorLeave">
+                              
+                              <div class="current-engine">
+                                  <i class="fa-brands fa-microsoft" v-if="searchEngine === 'bing'"></i>
+                                  <i class="fa-brands fa-google" v-if="searchEngine === 'google'"></i>
+                                  <i class="fa-solid fa-caret-down"></i>
+                              </div>
+                              
+                              <!-- 下拉菜单 -->
+                              <div class="engine-dropdown" v-show="showEngineDropdown">
+                                  <div class="engine-item" @click="setSearchEngine('bing')" :class="{active: searchEngine === 'bing'}">
+                                      <i class="fa-brands fa-microsoft"></i> Bing
+                                  </div>
+                                  <div class="engine-item" @click="setSearchEngine('google')" :class="{active: searchEngine === 'google'}">
+                                      <i class="fa-brands fa-google"></i> Google
+                                  </div>
+                              </div>
+                          </div>
+
+                          <!-- 输入框 -->
+                          <input 
+                              type="text" 
+                              v-model="welcomeSearchQuery" 
+                              class="ios-search-input"
+                              :placeholder="searchEngine === 'bing' ? 'Search with Bing' : 'Search with Google'"
+                              @focus="isSearchFocused = true"
+                              @blur="isSearchFocused = false"
+                              @keyup.enter="handleWelcomeSearch"
+                          >
+                          
+                          <!-- 搜索按钮 (右侧) -->
+                          <button class="ios-search-btn" @click="handleWelcomeSearch">
+                              <i class="fa-solid fa-arrow-right"></i>
+                          </button>
+                      </div>
+
+                  </div>
+              </div>
+
           </div>
         </div>
       </el-main>

@@ -4716,7 +4716,12 @@ body {
   
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
-
+.markdown-table-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 !important; /* 去掉 table 自身的 margin */
+  border: none !important; /* 边框交给 wrapper */
+}
 /* 优化滚动条样式（防止在Windows下滚动条太丑破坏圆角） */
 .markdown-table-wrapper::-webkit-scrollbar {
   height: 6px; /* 横向滚动条高度 */
@@ -5447,4 +5452,982 @@ hr.footnotes-sep {
 .footnote-backref:hover {
     color: var(--el-color-primary) !important;
     cursor: pointer;
+}
+/* --- START OF STREAMDOWN OPTIMIZATIONS --- */
+
+/* 1. 解决表格/布局抖动核心修复 */
+/* 强制表格容器块级化，防止内容撑开导致父级跳动 */
+.markdown-body table {
+  display: block !important;       /* 覆盖原本的 display: table */
+  width: 100% !important;
+  overflow-x: auto !important;     /* 允许横向滚动 */
+  table-layout: auto !important;   /* 让浏览器自动布局 */
+  margin-bottom: 1em !important;
+  border-collapse: collapse !important;
+  /* 防止空表头导致高度塌陷 */
+  min-height: 40px; 
+}
+
+/* 固定单元格行为，减少文字输入时的微小跳动 */
+.markdown-body th, 
+.markdown-body td {
+  min-width: 60px;               /* 最小宽度 */
+  word-break: break-word;        /* 允许换行 */
+  white-space: normal;
+  transition: background-color 0.2s; /* 仅颜色过渡，不过渡宽高 */
+}
+
+/* 2. 丝滑扫描进场动画 (Stream Effect) */
+@keyframes stream-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateY(5px) translateX(-5px);
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateX(0);
+    filter: blur(0);
+  }
+}
+
+/* 应用动画到 Markdown 的块级元素 */
+/* 注意：这里使用了 :not 排除已存在的元素，配合 morphdom 使用效果极佳 */
+.markdown-body > p,
+.markdown-body > ul,
+.markdown-body > ol,
+.markdown-body > table,
+.markdown-body > blockquote,
+.markdown-body > pre {
+  animation: stream-slide-in 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  transform-origin: left center;
+}
+
+/* 列表项逐个出现 */
+.markdown-body li {
+  animation: stream-slide-in 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* 3. 光标特效 (仅在正在生成的最后一段显示) */
+/* 我们通过 JS 给正在生成的容器加 .streaming 类 */
+.streaming > *:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 1.2em;
+  background-color: var(--el-color-primary);
+  margin-left: 4px;
+  vertical-align: sub;
+  animation: stream-blink 1s step-end infinite;
+  box-shadow: 0 0 8px var(--el-color-primary);
+}
+
+/* 代码块里不显示光标 */
+.streaming > pre:last-child::after {
+  display: none;
+}
+
+@keyframes stream-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* 4. 代码块防抖优化 */
+.markdown-body pre code {
+  /* 强制换行，防止代码过长导致布局瞬间撑开 */
+  white-space: pre-wrap !important; 
+  word-break: break-all !important; 
+}
+
+/* --- 修复表格底部空隙 --- */
+
+/* 1. 强制去除 Wrapper 内部 Table 的所有外边距 */
+/* markdown-body 通常给 table 设了 margin-bottom: 1rem，这会导致 Wrapper 底部有大片空白 */
+.markdown-table-wrapper table {
+  margin: 0 !important;
+  border-bottom: none !important; /* 避免双重边框 */
+}
+
+/* 2. 确保 Wrapper 紧贴内容 */
+.markdown-table-wrapper {
+  /* 确保 wrapper 自身没有多余的 padding */
+  padding: 0 !important; 
+  /* 确保溢出处理正确 */
+  overflow: hidden; 
+  /* 重新把圆角加回来，防止直角表格刺破圆角容器 */
+  border-radius: 8px;
+}
+
+/* 3. 去掉最后一行单元格的底部边框 (可选，为了完美视觉) */
+/* 因为 Wrapper 已经有边框了，如果最后一行也有 border-bottom，看起来会变粗 */
+.markdown-table-wrapper table tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* 4. 修复水平滚动条导致的高度 (可选) */
+/* 如果你需要横向滚动，确保滚动条不占据非滚动状态的高度 */
+.markdown-table-wrapper::-webkit-scrollbar {
+  height: 6px; 
+  background: transparent;
+}
+
+/* --- END OF STREAMDOWN OPTIMIZATIONS --- */
+
+
+/* =========================================
+   IOS Minimalist Browser Theme (Theme Adapted)
+   ========================================= */
+
+/* 容器 */
+.ai-browser-container {
+    display: flex;
+    flex-direction: column;
+    height: 100% !important; /* 强制占满父容器高度 */
+    /* 使用页面背景变量 */
+    background-color: var(--el-bg-color-page); 
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    transition: background-color 0.3s;
+}
+
+/* --- 顶部 Header --- */
+.browser-header {
+    /* 使用混合色实现半透明：取85%的主题背景色，混入透明色 */
+    background: color-mix(in srgb, var(--el-bg-color) 85%, transparent);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--el-border-color-light);
+    z-index: 100;
+    padding-bottom: 8px;
+}
+
+/* --- 标签栏 --- */
+.browser-tabs {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px 0 12px;
+    gap: 6px;
+    overflow-x: auto;
+}
+
+/* 标签样式 */
+.browser-tab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 180px;
+    height: 34px;
+    background: transparent;
+    border-radius: 8px;
+    padding: 0 10px;
+    font-size: 12px;
+    color: var(--el-text-color-regular); /* 适配文字颜色 */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.browser-tab.active {
+    background: var(--el-bg-color); /* 激活时使用卡片背景 */
+    color: var(--el-text-color-primary);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05); /* 阴影保持微弱 */
+    border: 1px solid var(--el-border-color-lighter);
+}
+
+.tab-content {
+    display: flex;
+    align-items: center;
+    width: 85%;
+    overflow: hidden;
+}
+
+.tab-icon img, .tab-icon i {
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
+    font-size: 14px;
+    color: var(--el-text-color-secondary);
+}
+
+.browser-tab.active .tab-icon i {
+    color: var(--el-color-primary); /* 激活图标使用主色 */
+}
+
+.tab-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.tab-close {
+    opacity: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    transition: all 0.2s;
+    color: var(--el-text-color-secondary);
+}
+
+.browser-tab:hover .tab-close {
+    opacity: 1;
+}
+.tab-close:hover {
+    background: var(--el-bg-color-page);
+    color: var(--el-color-danger);
+}
+
+.new-tab-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--el-text-color-regular);
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.new-tab-btn:hover {
+    background: var(--el-bg-color-page);
+}
+
+/* --- 工具栏 & 地址栏 --- */
+.browser-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    gap: 16px;
+}
+
+.nav-buttons {
+    display: flex;
+    gap: 4px;
+    width: 140px;
+}
+
+.nav-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    color: var(--el-text-color-primary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-btn:hover:not(:disabled) {
+    background: var(--el-bg-color-page);
+}
+.nav-btn:disabled {
+    color: var(--el-text-color-placeholder);
+    cursor: default;
+}
+
+.address-bar-wrapper {
+    flex: 1;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* 地址栏 Input */
+.ios-address-input .el-input__wrapper {
+    /* 使用稍深的填充色 */
+    background: var(--el-bg-color-page) !important; 
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    padding: 4px 12px !important;
+    height: 36px;
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.ios-address-input .el-input__wrapper.is-focus {
+    background-color: var(--el-bg-color) !important;
+    /* 聚焦光环使用主色 */
+    box-shadow: 0 0 0 2px var(--el-color-primary) !important; 
+}
+
+.ios-address-input .el-input__inner {
+    font-size: 14px;
+    color: var(--el-text-color-primary) !important;
+    text-align: left;
+}
+.address-lock-icon {
+    color: var(--el-text-color-secondary);
+    margin-right: 6px;
+    font-size: 12px;
+}
+
+
+/* --- 浏览器主体 --- */
+.browser-body {
+    flex: 1;              /* 占据剩余垂直空间 */
+    position: relative;   /* 关键：为内部绝对定位做基准 */
+    width: 100%;
+    height: 0;            /* 关键技巧：配合 flex:1 使用，防止被内部内容撑大导致滚动条 */
+    background: var(--el-bg-color);
+    overflow: hidden;
+}
+
+/* --- 极简欢迎页 (适配版) --- */
+.browser-welcome-page {
+    width: 100%;
+    height: 100%;
+    background: var(--el-bg-color-page);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+/* 3. Webview 包装器：使用绝对定位强制铺满 */
+.webview-wrapper {
+    position: absolute;   /* 脱离文档流，强制拉伸 */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    display: flex;        /* 确保内部 webview 能利用 flex 属性 */
+    flex-direction: column;
+}
+
+/* 4. Webview 标签本身 */
+.webview-element {
+    flex: 1;
+    width: 100% !important;
+    height: 100% !important;
+    border: none;
+    display: inline-flex; /* Electron webview 推荐的 display 属性 */
+}
+
+/* 5. 欢迎页也需要绝对定位铺满，否则可能会被挤压 */
+.browser-welcome-page {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;           /* 确保在 webview 上层（如果有重叠的话，虽然 v-if 控制了） */
+    background: var(--el-bg-color-page);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;     /* 允许欢迎页内容过多时滚动 */
+}
+
+.ios-welcome-container {
+    width: 100%;
+    max-width: 680px;
+    padding: 0 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: translateY(-10%);
+}
+
+.ios-title {
+    font-size: 48px;
+    font-weight: 700;
+    /* 标题渐变：从主文本色到次文本色 */
+    background: linear-gradient(135deg, var(--el-text-color-primary) 0%, var(--el-text-color-secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 40px;
+    letter-spacing: -1px;
+}
+
+/* 搜索框容器 */
+.ios-search-wrapper {
+    width: 100%;
+    height: 60px;
+    /* 搜索框背景：使用覆盖层背景(通常是纯色) + 透明度 */
+    background: var(--bg-color)!important;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 20px;
+    /* 阴影适配 */
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05), 0 2px 10px rgba(0,0,0,0.01);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    z-index: 500; /* 确保下拉菜单不被遮挡 */
+}
+
+/* 悬停和聚焦效果 */
+.ios-search-wrapper:hover {
+    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0,0,0,0.03);
+    transform: translateY(-1px);
+    border-color: var(--el-border-color);
+}
+
+.ios-search-wrapper.focused {
+    border-color: var(--el-color-primary);
+    /* 光晕使用主色，降低透明度 */
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--el-color-primary) 15%, transparent), 
+                0 15px 50px rgba(0, 0, 0, 0.1);
+}
+
+/* 引擎选择器 */
+.engine-selector {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    /* 增加 padding 让热区变大一点 */
+    padding-right: 12px;
+    padding-left: 4px; 
+    border-right: 1px solid var(--el-border-color-lighter);
+    background: var(--bg-color)!important;
+    cursor: pointer;
+}
+
+
+.current-engine {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    color: var(--el-text-color-primary);
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+.current-engine i {
+    font-size: 18px;
+}
+.current-engine .fa-caret-down {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+}
+
+/* 下拉菜单 */
+.engine-dropdown {
+    position: absolute;
+    /* 1. 改为 calc 方式定位，不使用 margin-top */
+    top: calc(100% + 10px); 
+    left: 0;
+    width: 140px;
+    background: var(--bg-color)!important;
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    border: 1px solid var(--el-border-color-light);
+    padding: 6px;
+    z-index: 1000;
+    /* margin-top: 10px;  <-- 2. 删掉这一行，因为我们用 top: calc() 代替了 */
+    animation: dropdownFade 0.2s ease-out;
+}
+.engine-dropdown::before {
+    content: '';
+    position: absolute;
+    /* 向上延伸 10px，填补与按钮之间的空隙 */
+    top: -10px; 
+    left: 0;
+    width: 100%;
+    height: 10px;
+    background: transparent; /* 透明，不可见但可交互 */
+}
+
+@keyframes dropdownFade {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.engine-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--el-text-color);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.engine-item.active {
+    color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+}
+
+/* 输入框 */
+.ios-search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    height: 100%;
+    padding: 0 16px;
+    font-size: 18px;
+    color: var(--el-text-color)!important;
+    background: var(--bg-color)!important;
+    outline: none;
+}
+.ios-search-input::placeholder {
+    color: var(--el-text-color-placeholder);
+    font-weight: 300;
+}
+
+/* 搜索按钮 */
+.ios-search-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--el-color-primary);
+    border: none;
+    color: #fff; /* 按钮文字固定白色 */
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    opacity: 0;
+    transform: scale(0.8);
+}
+
+.ios-search-wrapper.focused .ios-search-btn,
+.ios-search-wrapper:hover .ios-search-btn {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.ios-search-btn:hover {
+    /* 悬停加深颜色：混合黑色 */
+    background: color-mix(in srgb, var(--el-color-primary) 90%, black);
+    transform: scale(1.1);
+}
+
+
+/* ================= 集成浏览器条样式 ================= */
+
+.integrated-browser-bar {
+  display: flex;
+  align-items: center;
+  flex: 1; 
+  min-width: 0;
+  margin-top: 2px;
+  height: 100%;
+  gap: 8px;
+  -webkit-app-region: no-drag; /* 只有这部分不可拖拽 */
+  /* margin-left 已在 HTML 中内联设置，利用父级 top-bar 的 drag 属性实现左侧拖拽区域 */
+}
+
+/* 1. 地址栏 */
+.integrated-address-bar {
+  height: 26px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  width: 160px; /* 稍微调窄一点，给右边留空间 */
+  flex-shrink: 0;
+  transition: width 0.3s;
+}
+.integrated-address-bar:focus-within {
+  width: 220px; 
+}
+/* 输入框样式 */
+.ib-input .el-input__wrapper {
+  background-color: var(--el-fill-color-light);
+  border-radius: 15px;
+  padding: 0 10px;
+  height: 24px;
+  line-height: 24px;
+  box-shadow: none; 
+}
+.ib-input .el-input__inner {
+  font-size: 12px;
+  height: 24px;
+}
+
+/* 2. 标签栏容器 (位于中间) */
+.integrated-tabs-container {
+  flex: 1;
+  min-width: 0; /* 允许容器被压缩 */
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow-x: auto; /* 关键：开启横向滚动 */
+  overflow-y: hidden;
+  /* 隐藏滚动条 (Chrome/Electron) */
+  scrollbar-width: none; 
+  /* 两侧渐变遮罩 */
+  mask-image: linear-gradient(to right, transparent, black 20px, black 90%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20px, black calc(100% - 20px), transparent 100%);
+}
+.integrated-tabs-container::-webkit-scrollbar {
+  display: none;
+}
+.tabs-scroll-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  /* 关键：宽度根据内容自适应，但至少要填满容器 */
+  width: max-content; 
+  min-width: 100%; 
+}
+
+/* 单个标签 */
+.ib-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  
+  /* 1. 宽度策略：实现自动伸缩 */
+  width: 150px;       /* 默认理想宽度 */
+  min-width: 80px;    /* 关键：压到 80px 就不再压了，开始触发父容器滚动 */
+  max-width: 180px;
+  
+  /* 2. 弹性策略 */
+  flex-shrink: 0;     /* 这里有个权衡：*/
+  /* 如果设为 1：标签会一直挤压直到 min-width，然后才滚动（符合你的要求）*/
+  /* 如果设为 0：标签完全不挤压，直接滚动 */
+  /* 建议设为 0，因为配合边缘滚动，固定宽度的标签更容易点击 */
+  /* 但如果你一定要“先挤压后滚动”，请改为 flex-shrink: 1; */
+  
+  height: 26px;
+  margin-top: 4px;
+  /* 其他样式不变... */
+  background-color: transparent;
+  border-radius: 6px;
+  padding: 0 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  transition: background-color 0.2s, width 0.2s; /* 加个过渡动画更顺滑 */
+}
+
+.ib-tab.active {
+  background-color: var(--el-bg-color);
+  color: var(--el-color-primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.ib-tab-content {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  flex: 1;
+}
+.ib-icon {
+  display: flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+}
+.ib-icon img {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+}
+.ib-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ib-close {
+  opacity: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 10px;
+}
+.ib-tab:hover .ib-close {
+  opacity: 1;
+}
+.ib-close:hover {
+  background-color: var(--el-fill-color-dark);
+  color: var(--el-color-danger);
+}
+
+/* 3. 右侧控制组 (新建标签 + 导航) */
+.browser-controls-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0; /* 防止被挤压 */
+    background: var(--bg-color);
+    border-radius: 12px;
+    padding: 0 4px;
+    height: 26px;
+}
+
+/* 垂直分割线 */
+.ib-divider {
+    width: 1px;
+    height: 14px;
+    background-color: var(--el-border-color);
+    margin: 0 4px;
+}
+
+.ib-btn {
+  background: transparent;
+  border: none;
+  color: var(--el-text-color-primary);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 13px; /* 稍微大一点点 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  transition: background 0.2s;
+}
+.ib-btn:hover:not(:disabled) {
+  background-color: var(--el-fill-color-dark);
+}
+.ib-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 新建标签按钮特殊样式 (可选) */
+.new-tab-plus {
+    /* 如果想让它突出一点，可以加这个 */
+    color: var(--el-color-primary); 
+}
+
+/* 包装器，用于相对定位 */
+.download-manager-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+/* 按钮上的小红点 */
+.download-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 6px;
+    height: 6px;
+    background-color: var(--el-color-danger);
+    border-radius: 50%;
+    box-shadow: 0 0 2px rgba(0,0,0,0.3);
+}
+
+/* --- iOS 风格下拉面板 --- */
+.ios-dropdown-panel {
+    position: absolute;
+    top: 34px; /* 按钮高度下方 */
+    right: -10px; /* 稍微靠右对齐 */
+    width: 320px;
+    max-height: 400px;
+    background: var(--bg-color);
+    backdrop-filter: blur(20px); /* 核心：毛玻璃效果 */
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0,0,0,0.05);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    display: flex;
+    flex-direction: column;
+    z-index: 9999;
+    overflow: hidden;
+    animation: dropdownSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ios-dropdown-panel::before {
+    content: '';
+    position: absolute;
+    /* 向上延伸，填补按钮和面板之间的空隙 */
+    top: -20px; 
+    /* 占满整个宽度 */
+    left: 0;
+    width: 100%;
+    /* 高度要足够覆盖空隙，比如 gap 是 10px，这里设 20px 确保重叠 */
+    height: 20px; 
+    /* 透明背景 */
+    background: transparent; 
+    
+    /* 调试时可以把下面这行解开，看看桥在哪 */
+    /* background: rgba(255, 0, 0, 0.3); */
+}
+
+@keyframes dropdownSlideIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 头部 */
+.dropdown-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+}
+.clear-btn {
+    font-weight: normal;
+    color: var(--el-color-primary);
+    cursor: pointer;
+}
+.clear-btn:hover {
+    opacity: 0.8;
+}
+
+/* 列表区 */
+.download-list {
+    overflow-y: auto;
+    max-height: 350px;
+    padding: 8px;
+}
+.download-list::-webkit-scrollbar {
+    width: 4px;
+}
+.download-list::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.1);
+    border-radius: 2px;
+}
+
+/* 空状态 */
+.empty-state {
+    padding: 40px 0;
+    text-align: center;
+    color: var(--el-text-color-placeholder);
+    background: var(--bg-color);
+}
+.empty-state i {
+    font-size: 24px;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}
+
+/* 单个下载项 */
+.download-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-radius: 8px;
+    background: transparent;
+    transition: background 0.2s;
+    gap: 10px;
+    margin-bottom: 4px;
+    background: var(--bg-color);
+}
+.download-item:hover {
+    background: rgba(0,0,0,0.05);
+}
+.dark .download-item:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+/* 文件图标 */
+.file-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--el-fill-color);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--el-text-color-secondary);
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+/* 信息区 */
+.file-info {
+    flex: 1;
+    min-width: 0; /* 允许文本截断 */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.file-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--el-text-color-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-meta {
+    font-size: 10px;
+    color: var(--el-text-color-secondary);
+}
+
+/* 进度条 */
+.progress-bar-bg {
+    height: 3px;
+    width: 100%;
+    background: rgba(0,0,0,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.dark .progress-bar-bg { background: rgba(255,255,255,0.1); }
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--el-color-primary);
+    border-radius: 2px;
+    transition: width 0.2s;
+}
+
+/* 操作按钮 */
+.item-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.action-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--el-text-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+.action-btn:hover {
+    background: rgba(0,0,0,0.1);
+    color: var(--el-color-primary);
+}
+.action-btn.delete:hover {
+    background: rgba(245, 108, 108, 0.1); /* 浅红色 */
+    color: var(--el-color-danger);
+}
+.success-text { color: var(--el-color-success); }
+.error-text { color: var(--el-color-danger); }
+
+/* Vue 动画 transition */
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
 }

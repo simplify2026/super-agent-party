@@ -1816,4 +1816,30 @@ main();`,
     logContent: '', // 日志内容
     systemVoices: [],        // 存储从后端获取的音色列表
     isLoadingSystemVoices: false, // 加载状态
+    renderTimers: {}, // 用于存储每个消息的防抖定时器
+    mathJaxQueue: Promise.resolve(), // MathJax 串行队列，防止冲突
+    isMathJaxRunning: false,
+    // --- AI 浏览器数据 ---
+    browserTabs: [
+        // 默认初始化一个新标签页
+        { 
+            id: Date.now(), 
+            title: 'New Tab', 
+            url: '', // 空 URL 表示显示欢迎页
+            favicon: '', 
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false 
+        }
+    ],
+    currentTabId: null, // 将在 created 或 mounted 中初始化
+    urlInput: '',
+    showEngineDropdown: false, // 控制下拉菜单显示
+    dropdownTimer: null, // 新增定时器变量
+    isSearchFocused: false,    // 控制搜索框聚焦样式
+    searchEngine: 'bing', // 'bing' or 'google'
+    welcomeSearchQuery: '',
+    showDownloadDropdown: false,
+    downloads: [], // 存储所有下载记录 { id, filename, totalBytes, receivedBytes, state, path, progress }
+    dropdownTimer: null, 
 };

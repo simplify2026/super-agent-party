@@ -37,6 +37,19 @@ const md = window.markdownit({
 }
 });
 
+// 1. 重写表格开始标签：直接输出带 wrapper 的 HTML
+md.renderer.rules.table_open = function(tokens, idx, options, env, self) {
+  // 返回：<div class="markdown-table-wrapper"><table>
+  return '<div class="markdown-table-wrapper"><table' + self.renderAttrs(tokens[idx]) + '>';
+};
+
+// 2. 重写表格结束标签：闭合 table，添加按钮，闭合 div
+md.renderer.rules.table_close = function(tokens, idx, options, env, self) {
+  // 这里我们添加一个特殊的 class "download-xlsx-btn" 用于后续事件代理
+  // 注意：onclick 这里不直接写逻辑，而是通过 Vue 的事件代理来处理
+  return '</table><button class="table-download-btn download-xlsx-trigger" type="button"><i class="fa-solid fa-file-excel"></i> XLSX</button></div>';
+};
+
 if (window.markdownitFootnote) {
     md.use(window.markdownitFootnote);
     
@@ -579,25 +592,58 @@ let vue_methods = {
       this.isExpanded = !this.isExpanded; // 点击时切换状态
       this.maximizeWindow();
     },
+
+    throttledUpdate(index, newContent) {
+      // 更新原始数据
+      this.messages[index].content = newContent;
+      
+      // 如果已经有定时器在跑，则跳过（防抖）
+      if (this.renderTimers[index]) return;
+
+      this.renderTimers[index] = setTimeout(() => {
+        // 执行真正的渲染
+        this.messages[index].renderedHtml = this.formatMessage(newContent, index);
+        // 清除定时器
+        this.renderTimers[index] = null;
+      }, 80); // 80ms 延迟，约等于 12fps，人眼感觉流畅且不卡顿
+    },
+
+
     //  使用占位符处理 LaTeX 公式
-    formatMessage(content,index) {
+    formatMessage(content, index) {
+      if (!content) return '';
+
+      // 目的是防止 markdown-it 因为最后一行缺少 '|' 而在 Table 和 Paragraph 之间反复横跳
+      let processedForRender = content.trimEnd(); 
+      
+      // 获取最后一行
+      const lines = content.split('\n');
+      const lastLine = lines[lines.length - 1].trim();
+
+      // 如果最后一行以 '|' 开头（看起来像是表格行）
+      // 并且它还不是分隔行（即不是 |---| 这种）
+      // 并且它没有以 '|' 结尾
+      if (lastLine.startsWith('|') && !lastLine.endsWith('|') && !/^[|\s-:]+$/.test(lastLine)) {
+        // 临时在渲染用的字符串末尾补上 ' |'，让解析器认为这一行结束了
+        // 注意：这不会修改 this.messages 里的真实数据，只影响本次渲染
+        processedForRender += ' |';
+      }
+
+      // --- 预处理阶段 (保持您原有的逻辑) ---
       const parts = this.splitCodeAndText(content);
       let latexPlaceholderCounter = 0;
       const latexPlaceholders = [];
       let inUnclosedCodeBlock = false;
-    
+
       let processedContent = parts.map(part => {
         if (part.type === 'code') {
           inUnclosedCodeBlock = !part.closed;
-          return part.content; // 直接保留原始代码块内容
+          return part.content; 
         } else if (inUnclosedCodeBlock) {
-          // 处理未闭合代码块中的内容
-          return part.content
-            .replace(/`/g, '\\`') // 转义反引号
-            .replace(/\$/g, '\\$'); // 转义美元符号
+          // 修复：流式输出时，未闭合的代码块内容不要转义，否则用户会看到转义符
+          return part.content; 
         } else {
-          // 处理非代码内容
-          // 处理think标签
+          // 处理 <think> 标签
           const thinkTagRegexWithClose = /<think>([\s\S]*?)<\/think>/g;
           const thinkTagRegexOpenOnly = /<think>[\s\S]*$/;
           
@@ -608,9 +654,10 @@ let vue_methods = {
             .replace(thinkTagRegexOpenOnly, match => 
               match.replace('<think>', '<div class="highlight-block-reasoning">')
             );
-    
-          // 处理LaTeX公式
-          const latexRegex = /(\$.*?\$)|(\\\[.*?\\\])|(\\$.*?$)/g;
+
+          // 处理 LaTeX 公式 (提取并占位)
+          // 优化正则：增加非捕获组以提高性能
+          const latexRegex = /(\$(?:\\.|[^\$\\])*\$)|(\\\[(?:\\.|[^\\])*\\\])/g;
           return formatted.replace(latexRegex, (match) => {
             const placeholder = `LATEX_PLACEHOLDER_${latexPlaceholderCounter++}`;
             latexPlaceholders.push({ placeholder, latex: match });
@@ -618,59 +665,73 @@ let vue_methods = {
           });
         }
       }).join('');
-      // 删除包含非ASCII码的HTML标签
-      processedContent = removeNonAsciiTags(processedContent)
-      // 渲染Markdown
+
+      // --- 渲染阶段 ---
+      // 移除这一步的 removeNonAsciiTags，通常它会破坏中文显示，除非你有特殊需求
+      // processedContent = removeNonAsciiTags(processedContent); 
+
       let rendered = md.render(processedContent);
-    
-      // 恢复LaTeX占位符
+
+      // --- 恢复阶段 ---
+      // 恢复 LaTeX
       latexPlaceholders.forEach(({ placeholder, latex }) => {
         rendered = rendered.replace(placeholder, latex);
       });
-    
-      // 处理未闭合代码块的转义字符
+
+      // 处理未闭合代码块的转义 (如果有)
       rendered = rendered.replace(/\\\`/g, '`').replace(/\\\$/g, '$');
 
+      // 处理思考中的状态 (Thinking...)
+      const currentMsg = this.messages[index];
+      // 只有当是最后一条消息、角色是助手、且正在输入时才显示“思考中”图标
+      if (index === this.messages.length - 1 && currentMsg?.role === 'assistant' && this.isTyping && currentMsg.content !== currentMsg.pure_content) {
+        // 注意：这里不要直接加在 rendered 字符串里，最好在模板中通过 v-if 控制，
+        // 但为了兼容您的逻辑，我们保留：
+        rendered = `<div class="thinking-header"><i class="fa-solid fa-lightbulb"></i> ${this.t('thinking')}</div>` + rendered;
+      }
+
+      // --- 后处理 (MathJax & Mermaid) ---
+      // 我们不再在 formatMessage 内部直接调用 MathJax，而是将其推入队列
       this.$nextTick(() => {
-        MathJax.typesetPromise()
-          .then(() => {
-            this.initCopyButtons();
-            this.initPreviewButtons();
-          })
-          .catch(console.error);
+        this.queueMathJax(index);
+        this.initCopyButtons();
+        this.initPreviewButtons();
+        // Mermaid 也可以在这里懒加载
       });
 
-
-      if (index == this.messages.length - 1 && this.messages[index].role === 'assistant' && this.messages[index]?.briefly && this.messages[index]?.content != this.messages[index]?.pure_content&&this.isTyping) {
-        rendered = `<i class="fa-solid fa-lightbulb">${this.t('thinking')}</i><br>` + rendered
-      }
-
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = rendered;
-      // 处理链接标签
-      const links = tempDiv.getElementsByTagName('a');
-      for (const link of links) {
-        // 【新增】检测是否为脚注相关的链接
-        // 1. footnote-ref: 正文中的上标数字 (通常包裹在 sup 中，或自身带有该类)
-        // 2. footnote-backref: 底部列表跳回正文的箭头
-        const isFootnoteRef = link.parentElement && link.parentElement.classList.contains('footnote-ref');
-        const isFootnoteBack = link.classList.contains('footnote-backref');
-
-        if (isFootnoteRef || isFootnoteBack) {
-          // 如果是脚注，不做任何文件路径处理，也不强制新窗口打开
-          // 它们只需要能在当前页面锚点跳转即可
-          continue; 
+      // 处理链接 (保持您原有的 DOM 操作逻辑，但建议用正则替换以提高性能)
+      // 使用正则替换 href，比创建 DOM 树快得多
+      rendered = rendered.replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"([^>]*)>/g, (match, href, otherAttrs) => {
+        // 检查是否为脚注
+        if (otherAttrs.includes('footnote-ref') || otherAttrs.includes('footnote-backref') || href.startsWith('#')) {
+          return match; 
         }
+        const formattedHref = this.formatFileUrl(href);
+        return `<a href="${formattedHref}" target="_blank"${otherAttrs}>`;
+      });
 
-        // --- 下面是原本的普通链接处理逻辑 ---
-        const originalHref = link.getAttribute('href');
-        if (originalHref) {
-          link.setAttribute('href', this.formatFileUrl(originalHref));
-        }
-        link.setAttribute('target', '_blank');
-      }
-      
-      return tempDiv.innerHTML;
+      return rendered;
+    },
+
+  // 3. MathJax 队列处理 (解决流式输出时的公式闪烁/报错)
+  queueMathJax(index) {
+    // 找到对应的 DOM 元素（假设您在 template 中给了消息容器一个 ID，如 id="msg-content-${index}"）
+    const element = document.getElementById(`message-content-${index}`);
+    if (!element) return;
+
+    // 将渲染任务加入队列
+    this.mathJaxQueue = this.mathJaxQueue.then(() => {
+      if (!window.MathJax) return Promise.resolve();
+      // 使用 typesetPromise 而不是 typeset
+      return window.MathJax.typesetPromise([element]).catch(err => {
+        // 忽略渲染过程中的临时错误（常见于流式传输公式未闭合时）
+        console.debug('MathJax rendering skipped:', err.message);
+      });
+    });
+  },
+    formatMessageWrapper(content) {
+        // 调用您现有的 formatMessage，这里传 index = -1 避免产生副作用（如 thinking 图标）
+        return this.formatMessage(content, -1); 
     },
     copyLink(uniqueFilename) {
       const url = `${this.partyURL}/uploaded_files/${uniqueFilename}`
@@ -11274,6 +11335,75 @@ async togglePlugin(plugin) {
     });
   },
 
+  // 全局点击事件代理
+  handleGlobalClick(event) {
+    // 1. 检查点击的是否是 Excel 导出按钮
+    // closest 处理用户可能点到图标 <i> 的情况
+    const btn = event.target.closest('.download-xlsx-trigger');
+    
+    if (btn) {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      // 找到同级的前一个兄弟元素 (即 table)
+      // 根据上面 markdown-it 的结构: <table>...</table> <button>...</button>
+      // 所以 button.previousElementSibling 就是 table
+      const table = btn.previousElementSibling;
+      
+      if (table && table.tagName === 'TABLE') {
+        this.exportTable(btn, table);
+      }
+    }
+  },
+
+    handleMessageLinkClick(event) {
+        // 1. 如果你原有的 handleGlobalClick 有逻辑（比如点击空白处关闭菜单），在这里调用它
+        this.handleGlobalClick(event); 
+
+        if(isElectron){
+
+          const link = event.target.closest('a');
+
+          if (link && link.href) {
+              const href = link.href;
+
+              // 2. 过滤逻辑：只拦截 http/https 网络链接
+              if (href.startsWith('http') || href.startsWith('https')) {
+                  
+                  // ★ 关键：同时调用 stopPropagation 和 preventDefault
+                  event.preventDefault();  // 阻止链接默认跳转
+                  event.stopPropagation(); // 阻止事件继续传播
+                  
+                  // 3. 打开内部浏览器
+                  console.log('拦截到链接，正在内部浏览器打开:', href);
+                  this.openUrlInNewTab(href);
+              }
+          }
+        
+        }
+
+    },
+
+  // 这里的逻辑跟您原来的 click 类似，只是参数变了
+  async exportTable(btn, tableElement) {
+    if (btn.disabled) return; // 防止重复点击
+
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 导出中...';
+    btn.disabled = true;
+
+    try {
+      await this.downloadTableAsXLSX(tableElement);
+    } catch (error) {
+      console.error('导出失败', error);
+      // 如果有 Element Plus
+      if (this.$message) this.$message.error('导出失败');
+    } finally {
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+    }
+  },
+
   /**
    * 使用 ExcelJS 生成真正的 .xlsx 文件
    */
@@ -11549,4 +11679,385 @@ async togglePlugin(plugin) {
         return '';
     },
 
+
+    // AI浏览器相关
+    openUrlInNewTab(url) {
+        // 如果 url 为空或者无效，可以做个判断，或者直接打开
+        if (!url) return;
+
+        const newTab = {
+            id: Date.now(),
+            title: 'Loading...',
+            url: url,
+            favicon: '',
+            isLoading: true,
+            canGoBack: false,
+            canGoForward: false
+        };
+        this.browserTabs.push(newTab);
+        this.switchTab(newTab.id);
+        this.activeMenu = 'ai-browser';
+    },
+
+    // 切换标签
+    switchTab(id) {
+        this.currentTabId = id;
+        const tab = this.browserTabs.find(t => t.id === id);
+        if (tab) {
+            // 更新地址栏
+            this.urlInput = tab.url; 
+            // 如果是欢迎页，清空地址栏显示
+            if (!tab.url) this.urlInput = '';
+        }
+    },
+
+    // 添加新标签
+    addNewTab() {
+        const newTab = {
+            id: Date.now(),
+            title: 'New Tab',
+            url: '',
+            favicon: '',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false
+        };
+        this.browserTabs.push(newTab);
+        this.switchTab(newTab.id);
+    },
+
+    // 关闭标签
+    closeTab(id, event) {
+        if (event) event.stopPropagation(); // 防止触发点击切换
+        
+        const index = this.browserTabs.findIndex(t => t.id === id);
+        if (index === -1) return;
+
+        // 如果关闭的是当前标签，需要切换到另一个
+        if (this.currentTabId === id) {
+            if (this.browserTabs.length > 1) {
+                // 优先切到右边，没右边切左边
+                const nextTab = this.browserTabs[index + 1] || this.browserTabs[index - 1];
+                this.currentTabId = nextTab.id;
+                this.urlInput = nextTab.url;
+            } else {
+                // 如果只剩这一个，重置它而不是删除
+                this.addNewTab(); // 加个新的
+                this.browserTabs.splice(index, 1); // 删掉旧的
+                return;
+            }
+        }
+        
+        this.browserTabs.splice(index, 1);
+    },
+
+    // 地址栏回车
+    handleUrlEnter() {
+        let val = this.urlInput.trim();
+        if (!val) return;
+
+        // 简单的 URL 补全逻辑
+        if (!/^https?:\/\//i.test(val)) {
+            // 如果看起来像域名
+            if (/^([\w-]+\.)+[\w-]+/.test(val) && !val.includes(' ')) {
+                val = 'https://' + val;
+            } else {
+                // 否则当做搜索
+                if (this.searchEngine === 'google') {
+                    val = `https://www.google.com/search?q=${encodeURIComponent(val)}`;
+                } else {
+                    val = `https://www.bing.com/search?q=${encodeURIComponent(val)}`;
+                }
+            }
+        }
+
+        this.navigateTo(val);
+    },
+
+    // 欢迎页搜索回车
+    handleWelcomeSearch() {
+        const query = this.welcomeSearchQuery.trim();
+        if (!query) return;
+
+        let searchUrl = '';
+        if (this.searchEngine === 'google') {
+            searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+        } else {
+            searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+        }
+        
+        this.navigateTo(searchUrl);
+    },
+
+    // 核心导航方法
+    navigateTo(url) {
+        if (!this.currentTab) return;
+        
+        this.currentTab.url = url;
+        this.urlInput = url;
+        
+        // 强制 Vue 更新后，获取 webview DOM 并加载 URL
+        // 因为如果之前 url 为空，webview 是 v-if 销毁状态，现在才渲染出来
+        this.$nextTick(() => {
+            const webview = document.getElementById('webview-' + this.currentTabId);
+            if (webview) {
+                // 如果 webview 刚创建，直接设置 src 属性即可 (Vue绑定已处理)
+                // 但如果它已经存在，调用 loadURL 更稳
+                 webview.loadURL(url);
+            }
+        });
+    },
+    
+    // 回到主页 (新标签页)
+    goHome() {
+        if(this.currentTab) {
+            this.currentTab.url = '';
+            this.currentTab.title = 'New Tab';
+            this.currentTab.favicon = '';
+            this.urlInput = '';
+        }
+    },
+
+    // --- Webview 导航控制 ---
+    getWebview(id) {
+        return document.getElementById('webview-' + (id || this.currentTabId));
+    },
+
+    browserGoBack() {
+        const wv = this.getWebview();
+        if (wv && wv.canGoBack()) wv.goBack();
+    },
+
+    browserGoForward() {
+        const wv = this.getWebview();
+        if (wv && wv.canGoForward()) wv.goForward();
+    },
+
+    browserReload() {
+        const wv = this.getWebview();
+        if(!wv) return;
+        if (this.currentTab.isLoading) {
+            wv.stop();
+        } else {
+            wv.reload();
+        }
+    },
+
+    // --- Webview 事件监听 ---
+    // 注意：这些事件在 HTML 中通过 @did-start-loading="..." 绑定
+    
+    onDidStartLoading(id) {
+        const tab = this.browserTabs.find(t => t.id === id);
+        if (tab) tab.isLoading = true;
+    },
+
+    onDidStopLoading(id) {
+        const tab = this.browserTabs.find(t => t.id === id);
+        if (tab) {
+            tab.isLoading = false;
+            // 更新导航状态
+            const wv = document.getElementById('webview-' + id);
+            if (wv) {
+                tab.canGoBack = wv.canGoBack();
+                tab.canGoForward = wv.canGoForward();
+                // 尝试获取 URL (为了防止重定向后 URL 没变)
+                if (wv.getURL()) {
+                     tab.url = wv.getURL();
+                     if (this.currentTabId === id) this.urlInput = tab.url;
+                }
+            }
+        }
+    },
+
+    onPageTitleUpdated(id, event) {
+        const tab = this.browserTabs.find(t => t.id === id);
+        if (tab) tab.title = event.title;
+    },
+
+    onPageFaviconUpdated(id, event) {
+        const tab = this.browserTabs.find(t => t.id === id);
+        if (tab && event.favicons && event.favicons.length > 0) {
+            tab.favicon = event.favicons[0];
+        }
+    },
+
+    // 处理网页内部 window.open
+    onNewWindow(id, event) {
+        // 在应用内新建标签页打开，而不是弹出新窗口
+        const { url } = event;
+        const newTab = {
+            id: Date.now(),
+            title: 'Loading...',
+            url: url,
+            favicon: '',
+            isLoading: true,
+            canGoBack: false,
+            canGoForward: false
+        };
+        this.browserTabs.push(newTab);
+        this.switchTab(newTab.id);
+    },
+    
+    onDomReady(id) {
+         // 可以在这里注入自定义 CSS 或 JS 到页面中
+         // const wv = document.getElementById('webview-' + id);
+         // wv.insertCSS('body { font-family: sans-serif; }')
+    },
+
+    // 切换引擎下拉
+    toggleEngineDropdown() {
+        this.showEngineDropdown = !this.showEngineDropdown;
+    },
+
+    // 设置引擎并关闭下拉
+    setSearchEngine(engine) {
+        this.searchEngine = engine;
+        this.showEngineDropdown = false;
+        // 如果想要切换后自动聚焦输入框
+        this.$nextTick(() => {
+            const input = document.querySelector('.ios-search-input');
+            if(input) input.focus();
+        });
+    },
+
+    // 搜索框失焦处理 (延迟关闭下拉，防止点击菜单项时菜单先消失)
+    handleSearchBlur() {
+        this.isSearchFocused = false;
+        setTimeout(() => {
+            this.showEngineDropdown = false;
+        }, 200);
+    },
+
+    // 修改原有的 addNewTab，确保样式正确
+    addNewTab() {
+        const newTab = {
+            id: Date.now(),
+            title: 'New Tab',
+            url: '',
+            favicon: '',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false
+        };
+        this.browserTabs.push(newTab);
+        this.switchTab(newTab.id);
+        
+        // 自动聚焦到欢迎页搜索框
+        this.$nextTick(() => {
+             const input = document.querySelector('.ios-search-input');
+             if(input) input.focus();
+        });
+    },
+
+    handleSelectorEnter() {
+        if (this.dropdownTimer) clearTimeout(this.dropdownTimer);
+        this.showEngineDropdown = true;
+    },
+
+    // 鼠标离开区域：延迟 200ms 关闭，给用户移动鼠标的时间
+    handleSelectorLeave() {
+        this.dropdownTimer = setTimeout(() => {
+            this.showEngineDropdown = false;
+        }, 200); // 200ms 延迟
+    },
+
+    // ★★★ 核心：处理边缘滚动 ★★★
+    handleTabsMouseMove(e) {
+      // 在 Options API 中，通过 this.$refs 访问 DOM
+      const container = this.$refs.tabsContainerRef;
+      
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left; // 鼠标相对于容器左侧的距离
+      const width = rect.width;
+      const threshold = 60; // 边缘触发滚动的范围 (px)
+      const speed = 8;      // 滚动速度
+
+      // 先清除可能存在的旧定时器
+      this.stopEdgeScroll();
+
+      // 定义滚动函数
+      const scroll = (direction) => {
+        if (direction === 'left') {
+          container.scrollLeft -= speed;
+        } else {
+          container.scrollLeft += speed;
+        }
+        // 持续循环
+        this.scrollInterval = requestAnimationFrame(() => scroll(direction));
+      };
+
+      // 判断鼠标位置
+      if (x < threshold) {
+        // 鼠标在左边缘 -> 向左滑
+        scroll('left');
+      } else if (x > width - threshold) {
+        // 鼠标在右边缘 -> 向右滑
+        scroll('right');
+      } else {
+        // 在中间 -> 停止滚动
+        this.stopEdgeScroll();
+      }
+    },
+
+    // 停止滚动
+    stopEdgeScroll() {
+      if (this.scrollInterval) {
+        cancelAnimationFrame(this.scrollInterval);
+        this.scrollInterval = null;
+      }
+    },
+
+
+    controlDownload(id, action) {
+        window.downloadAPI.controlDownload(id, action);
+    },
+
+    handleStopOrRemove(item) {
+        if (item.state === 'progressing' || item.state === 'paused') {
+            // 如果还在下载，就是取消
+            this.controlDownload(item.id, 'cancel');
+        } else {
+            // 如果已完成或已取消，就是从列表中删除记录
+            this.downloads = this.downloads.filter(d => d.id !== item.id);
+        }
+    },
+
+    openFileFolder(path) {
+        if(path) window.downloadAPI.showItemInFolder(path);
+    },
+
+    clearFinishedDownloads() {
+        // 只保留正在下载的项目
+        this.downloads = this.downloads.filter(d => d.state === 'progressing' || d.state === 'paused');
+    },
+
+    // 字节格式化工具
+    formatBytes(bytes, decimals = 1) {
+        if (!bytes) return '0 B';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    },
+    handleDropdownEnter() {
+        // 1. 如果有关闭的定时器正在倒计时，立刻取消它！
+        if (this.dropdownTimer) {
+            clearTimeout(this.dropdownTimer);
+            this.dropdownTimer = null;
+        }
+        // 2. 显示面板
+        this.showDownloadDropdown = true;
+    },
+
+    // ★ 鼠标离开
+    handleDropdownLeave() {
+        // 给用户 300ms 的反应时间
+        this.dropdownTimer = setTimeout(() => {
+            this.showDownloadDropdown = false;
+            this.dropdownTimer = null;
+        }, 300); 
+    },
 }

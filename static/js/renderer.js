@@ -407,6 +407,9 @@ const A2UIRendererComponent = {
     return { internalFormData: {}, isSubmitted: false };
   },
   computed: {
+    activeDownloadCount() {
+        return this.downloads.filter(d => d.state === 'progressing').length;
+    },
     formData() {
       return this.sharedFormData || this.internalFormData;
     },
@@ -660,6 +663,7 @@ const app = Vue.createApp({
   },
   // 在组件销毁时清除定时器
   beforeDestroy() {
+    this.stopEdgeScroll();
     if (this.behaviorTimeTimer)   clearInterval(this.behaviorTimeTimer)
     if (this.behaviorNoInputTimer) clearInterval(this.behaviorNoInputTimer)
     if (this.vrmPollTimer) clearInterval(this.vrmPollTimer)
@@ -678,6 +682,49 @@ const app = Vue.createApp({
     this.disconnectWebSocket();
   },
   async mounted() {
+    // ★ 监听主进程发来的“开新标签”指令
+    if (window.electronAPI && window.electronAPI.onNewTab) {
+        window.electronAPI.onNewTab((url) => {
+            console.log('收到新标签页请求:', url);
+            this.openUrlInNewTab(url);
+        });
+    }
+    // 监听下载事件
+    if (window.downloadAPI) {
+        window.downloadAPI.onDownloadStarted((data) => {
+            // 新增下载项放到最前面
+            this.downloads.unshift({
+                ...data,
+                state: 'progressing',
+                receivedBytes: 0,
+                progress: 0
+            });
+            // 自动打开下拉框提示用户 (可选)
+            // this.showDownloadDropdown = true; 
+        });
+
+        window.downloadAPI.onDownloadUpdated((data) => {
+            const item = this.downloads.find(d => d.id === data.id);
+            if (item) {
+                Object.assign(item, data); // 更新状态和进度
+            }
+        });
+
+        window.downloadAPI.onDownloadDone((data) => {
+            const item = this.downloads.find(d => d.id === data.id);
+            if (item) {
+                item.state = data.state;
+
+                if (data.path) {
+                    item.path = data.path; 
+                }
+                if (data.state === 'completed') {
+                    item.progress = 1;
+                    item.receivedBytes = item.totalBytes;
+                }
+            }
+        });
+    }
     await this.probeNode();
     await this.probeUv(); 
     await this.probeGit();
@@ -803,8 +850,15 @@ const app = Vue.createApp({
     if (this.ttsSettings && this.ttsSettings.engine === 'systemtts') {
       this.fetchSystemVoices();
     }
+    document.addEventListener('click', (e) => {
+        const selector = document.querySelector('.engine-selector');
+        if (selector && !selector.contains(e.target)) {
+            this.showEngineDropdown = false;
+        }
+    });
   },
   beforeUnmount() {
+    this.stopEdgeScroll();
     clearInterval(this.nodeTimer);
     clearInterval(this.uvTimer); 
     clearInterval(this.gitTimer);
@@ -821,15 +875,6 @@ const app = Vue.createApp({
     window.removeEventListener('resize', this.handleResize);
   },
   watch: {
-    messages: {
-      handler() {
-        // 这里的 setTimeout 是为了等待 Markdown 渲染库完成 DOM 更新
-        setTimeout(() => {
-          this.addTableEnhancements();
-        }, 300); 
-      },
-      deep: true
-    },
 
     'ttsSettings.engine': function(newVal) {
       if (newVal === 'systemtts') {
@@ -955,9 +1000,9 @@ const app = Vue.createApp({
       // 如果没有找到符合条件的消息
       return '';
     },
-  currentViewName() {
-    return this.currentExtension ? this.currentExtension.name : this.t('defaultView');
-  },
+    currentViewName() {
+      return this.currentExtension ? this.currentExtension.name : this.t('defaultView');
+    },
     /* 计算属性：默认模板 */
     defaultSidePanelHTML() {
       // 如果用户已给出自定义模板，就直接用
@@ -1299,10 +1344,46 @@ const app = Vue.createApp({
         p => p.id === this.settings.selectedProvider
       );
     },
+    currentTab() {
+        return this.browserTabs.find(t => t.id === this.currentTabId);
+    },
   },
   methods: {
     ...vue_methods,
-  }
+  },
+  directives: {
+    morph: {
+      mounted(el, binding, vnode) {
+        // 获取组件实例 context
+        const vm = binding.instance; 
+        el._update = (content) => {
+           // 使用 morphdom 的逻辑 (参考上文 script 中的 updateElement)
+           // 这里的 formatFn 我们直接调用组件的 methods
+           const html = vm.formatMessage(content, -1); // 传入内容进行渲染
+           
+           // ... 执行 morphdom(el, html_wrapper) ...
+           // (将上文 step 2 的 updateElement 逻辑复制到这里)
+           
+           // 简单版实现：
+           const wrapper = document.createElement('div');
+           wrapper.innerHTML = html;
+           morphdom(el, wrapper, { childrenOnly: true });
+        };
+        el._update(binding.value);
+      },
+      updated(el, binding) {
+        if (binding.value !== binding.oldValue) {
+           el._update(binding.value);
+        }
+      }
+    }
+  },
+  created() {
+      if (this.browserTabs.length > 0) {
+          this.currentTabId = this.browserTabs[0].id;
+      }
+      this.scrollInterval = null;
+  },
 });
 
 function showNotification(message, type = 'success') {
