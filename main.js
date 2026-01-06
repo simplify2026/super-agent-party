@@ -209,6 +209,12 @@ const locales = {
     supportedFiles: '支持的文件',
     allFiles: '所有文件',
     supportedimages: '支持的图片',
+    // 新增项
+    openNewTab: '在新标签页打开',
+    copyLink: '复制链接地址',
+    copyLinkText: '复制链接文本',
+    selectAll: '全选',
+    inspect: '检查元素'
   },
   'en-US': {
     show: 'Show Window',
@@ -222,6 +228,12 @@ const locales = {
     supportedFiles: 'Supported Files',
     allFiles: 'All Files',
     supportedimages: 'Supported Images',
+    // 新增项
+    openNewTab: 'Open in new tab',
+    copyLink: 'Copy link address',
+    copyLinkText: 'Copy link text',
+    selectAll: 'Select All',
+    inspect: 'Inspect'
   }
 };
 const ALLOWED_EXTENSIONS = [
@@ -1199,20 +1211,31 @@ app.whenReady().then(async () => {
     }
 
     // 修改 show-context-menu 的 IPC 处理
+
     ipcMain.handle('show-context-menu', async (event, { menuType, data }) => {
-      let menuTemplate;
+      let menuTemplate = [];
+      const win = BrowserWindow.fromWebContents(event.sender);
       
-    if (menuType === 'image') {
+      // 直接使用 locales[currentLanguage]
+      const lang = locales[currentLanguage]; 
+
+      // --- A. 图片菜单 ---
+      if (menuType === 'image') {
         menuTemplate = [
           {
-            label: locales[currentLanguage].copyImageLink,
+            label: lang.openNewTab,
+            click: () => {
+              win.webContents.send('create-tab', data.src);
+            }
+          },
+          { type: 'separator' },
+          {
+            label: lang.copyImageLink,
             click: () => clipboard.writeText(data.src)
           },
           {
-            label: locales[currentLanguage].copyImage,
+            label: lang.copyImage,
             click: async () => {
-              // 恢复为最基础、最稳定的图片复制（仅像素数据）
-              // 解决之前写入文件路径导致的兼容性问题
               try {
                 if (data.src.startsWith('data:')) {
                   const image = nativeImage.createFromDataURL(data.src);
@@ -1232,43 +1255,31 @@ app.whenReady().then(async () => {
               }
             }
           },
-          // ★ 新增：图片另存为功能
           {
-            label: locales[currentLanguage].saveImageAs,
+            label: lang.saveImageAs,
             click: async () => {
               try {
-                const win = BrowserWindow.fromWebContents(event.sender);
                 let buffer = null;
                 let defaultExtension = 'png';
 
-                // 1. 获取图片数据 Buffer
                 if (data.src.startsWith('data:')) {
-                  // 处理 Base64
                   const image = nativeImage.createFromDataURL(data.src);
                   buffer = image.toPNG();
-                  defaultExtension = 'png';
                 } else if (data.src.startsWith('http')) {
-                  // 处理网络图片
                   const response = await fetch(data.src);
                   const blob = await response.blob();
                   buffer = Buffer.from(await blob.arrayBuffer());
-                  // 简单猜测扩展名，默认 png
-                  if (data.src.toLowerCase().endsWith('.jpg') || data.src.toLowerCase().endsWith('.jpeg')) {
-                    defaultExtension = 'jpg';
-                  } else if (data.src.toLowerCase().endsWith('.gif')) {
-                    defaultExtension = 'gif';
-                  } else if (data.src.toLowerCase().endsWith('.webp')) {
-                    defaultExtension = 'webp';
-                  }
+                  const lowerSrc = data.src.toLowerCase();
+                  if (lowerSrc.endsWith('.jpg') || lowerSrc.endsWith('.jpeg')) defaultExtension = 'jpg';
+                  else if (lowerSrc.endsWith('.gif')) defaultExtension = 'gif';
+                  else if (lowerSrc.endsWith('.webp')) defaultExtension = 'webp';
                 } else {
-                  // 处理本地文件
                   buffer = fs.readFileSync(data.src);
                   defaultExtension = path.extname(data.src).replace('.', '') || 'png';
                 }
 
-                // 2. 弹出保存对话框
                 const { filePath } = await dialog.showSaveDialog(win, {
-                  title: locales[currentLanguage].saveImageAs,
+                  title: lang.saveImageAs,
                   defaultPath: `image_${Date.now()}.${defaultExtension}`,
                   filters: [
                     { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
@@ -1276,11 +1287,8 @@ app.whenReady().then(async () => {
                   ]
                 });
 
-                // 3. 写入文件
                 if (filePath) {
                   fs.writeFileSync(filePath, buffer);
-                  // 可选：提示保存成功，或者不做打扰
-                  // console.log('图片已保存至:', filePath);
                 }
               } catch (error) {
                 console.error('图片另存为失败:', error);
@@ -1289,18 +1297,68 @@ app.whenReady().then(async () => {
             }
           }
         ];
-      } else {
-        // 原有基础菜单
+      } 
+      // --- B. 链接菜单 ---
+      else if (menuType === 'link') {
         menuTemplate = [
-          { label: locales[currentLanguage].cut, role: 'cut' },
-          { label: locales[currentLanguage].copy, role: 'copy' },
-          { label: locales[currentLanguage].paste, role: 'paste' }
+          {
+            label: lang.openNewTab,
+            click: () => {
+              win.webContents.send('create-tab', data.url);
+            }
+          },
+          { type: 'separator' },
+          {
+            label: lang.copyLink,
+            click: () => clipboard.writeText(data.url)
+          },
+          {
+            label: lang.copyLinkText,
+            click: () => clipboard.writeText(data.text || '')
+          }
+        ];
+      }
+      // --- C. 纯文本/选区菜单 ---
+      else if (menuType === 'text') {
+        menuTemplate = [
+          { label: lang.copy, role: 'copy' },
+          { 
+            label: `Search "${data.text.length > 15 ? data.text.slice(0, 15) + '...' : data.text}"`,
+            click: () => {
+              const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(data.text)}`;
+              win.webContents.send('create-tab', searchUrl);
+            } 
+          },
+          { type: 'separator' },
+          { label: lang.selectAll, role: 'selectAll' }
+        ];
+      }
+      // --- D. 默认/空白处菜单 ---
+      else {
+        menuTemplate = [
+          { label: lang.cut, role: 'cut' },
+          { label: lang.copy, role: 'copy' },
+          { label: lang.paste, role: 'paste' },
+          { type: 'separator' },
+          { label: lang.selectAll, role: 'selectAll' }
         ];
       }
 
+      // --- E. 开发模式下添加检查元素 ---
+      if (isDev) {
+        menuTemplate.push({ type: 'separator' });
+        menuTemplate.push({
+          label: lang.inspect,
+          click: () => {
+            win.webContents.openDevTools({ mode: 'detach' });
+          }
+        });
+      }
+
       menu = Menu.buildFromTemplate(menuTemplate);
-      menu.popup(BrowserWindow.fromWebContents(event.sender));
+      menu.popup({ window: win });
     });
+
     // 监听关闭事件
     ipcMain.handle('request-stop-qqbot', async (event) => {
       const win = BrowserWindow.getAllWindows()[0]; // 获取主窗口

@@ -11898,10 +11898,45 @@ async togglePlugin(plugin) {
         this.switchTab(newTab.id);
     },
     
-    onDomReady(id) {
-         // 可以在这里注入自定义 CSS 或 JS 到页面中
-         // const wv = document.getElementById('webview-' + id);
-         // wv.insertCSS('body { font-family: sans-serif; }')
+    // 在 methods 中添加或修改 onDomReady
+    onDomReady(tabId) {
+        const webview = document.getElementById('webview-' + tabId);
+        if (!webview) return;
+
+        webview.addEventListener('context-menu', (e) => {
+            // ★★★ 关键调试点：打印出 Electron 传来的所有参数 ★★★
+            console.log('Webview Context Menu Params:', e.params);
+            
+            const params = e.params;
+            let menuType = 'default';
+            let data = {};
+
+            // 重新审视和调整判断逻辑的顺序，确保最具体的匹配优先
+            if (params.mediaType === 'image' && params.srcURL && params.srcURL.length > 0) {
+                menuType = 'image';
+                data = { src: params.srcURL };
+                console.log('Detected Image Context:', data); // 调试
+            } else if (params.linkURL && params.linkURL.length > 0) {
+                menuType = 'link';
+                data = { 
+                    url: params.linkURL, 
+                    text: params.linkText || params.selectionText || '' 
+                };
+                console.log('Detected Link Context:', data); // 调试
+            } else if (params.selectionText && params.selectionText.length > 0) {
+                menuType = 'text';
+                data = { text: params.selectionText };
+                console.log('Detected Text Context:', data); // 调试
+            } else {
+                menuType = 'default';
+                console.log('Detected Default Context'); // 调试
+            }
+
+            // 再次打印最终决定发送的类型和数据
+            console.log(`Sending context menu request: Type = ${menuType}, Data =`, data);
+
+            window.electronAPI.showContextMenu(menuType, data);
+        });
     },
 
     // 切换引擎下拉

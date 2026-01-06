@@ -122,7 +122,7 @@ async def check_robots_txt(url):
     ROBOTS_CACHE[base_url] = rp
     return rp.can_fetch(USER_AGENT, url)
 
-def sanitize_url(input_url: str, default_base: str, endpoint: str) -> str:
+def sanitize_url(input_url: str, default_base: str = "", endpoint: str = "") -> str:
     """
     通用 URL 安全过滤与重构函数
     1. 显式解析并验证协议
@@ -169,7 +169,7 @@ async def handle_url(url):
         if HOST == '0.0.0.0': HOST = '127.0.0.1'
         
         # 使用 sanitize_url 强行重写域名部分
-        target_url = sanitize_url(url, force_netloc=f"{HOST}:{PORT}")
+        target_url = sanitize_url(url, f"http://{HOST}:{PORT}", '')
         
         async with aiohttp.ClientSession() as session:
             try:
