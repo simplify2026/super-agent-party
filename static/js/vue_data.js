@@ -72,7 +72,6 @@ let vue_data = {
     updateIcon: 'fa-solid fa-download',
     system_prompt: ' ',
     SystemPromptsList: [],          // 系统提示词数组
-    extensionsSystemPromptsDict: {}, // 扩展提示词字典
     showPromptDialog: false,        // 对话框显隐
     promptForm: {                   // 对话框绑定
       id: null,
@@ -176,7 +175,7 @@ let vue_data = {
         enabled: false,
       },
       a2ui: {
-        enabled: false,
+        enabled: true,
       },
       time: {
         enabled: false,
@@ -550,44 +549,6 @@ let vue_data = {
       customTTSKeySpeed: 'speed',
       systemVoiceName: null,
       systemRate: 200,
-      // Tetos 通用音色列表缓存 (当切换引擎时刷新)
-      tetosVoices: [],
-      isFetchingVoices: false,
-
-      // Azure
-      azureSpeechKey: '',
-      azureRegion: '',
-      azureVoice: '',
-
-      // Volcengine
-      volcAccessKey: '',
-      volcSecretKey: '',
-      volcAppKey: '',
-      volcVoice: '',
-
-      // Baidu
-      baiduApiKey: '',
-      baiduSecretKey: '',
-      baiduVoice: '',
-
-      // Minimax
-      minimaxApiKey: '',
-      minimaxGroupId: '',
-      minimaxVoice: '',
-
-      // Xunfei
-      xunfeiAppId: '',
-      xunfeiApiKey: '',
-      xunfeiApiSecret: '',
-      xunfeiVoice: '',
-
-      // Fish Audio
-      fishApiKey: '',
-      fishVoice: '',
-
-      // Google
-      googleServiceAccount: '', // JSON 字符串
-      googleVoice: '',
       newtts:{}
     },
     activeTTSTab: 'default', // 控制 TTS 标签页切换
@@ -621,45 +582,6 @@ let vue_data = {
       customTTSspeed: 1.0,
       systemVoiceName: null,
       systemRate: 200,
-      // Tetos 通用音色列表缓存 (当切换引擎时刷新)
-      tetosVoices: [],
-      isFetchingVoices: false,
-
-      // Azure
-      azureSpeechKey: '',
-      azureRegion: '',
-      azureVoice: '',
-
-      // Volcengine
-      volcAccessKey: '',
-      volcSecretKey: '',
-      volcAppKey: '',
-      volcVoice: '',
-
-      // Baidu
-      baiduApiKey: '',
-      baiduSecretKey: '',
-      baiduVoice: '',
-
-      // Minimax
-      minimaxApiKey: '',
-      minimaxGroupId: '',
-      minimaxVoice: '',
-
-      // Xunfei
-      xunfeiAppId: '',
-      xunfeiApiKey: '',
-      xunfeiApiSecret: '',
-      xunfeiVoice: '',
-
-      // Fish Audio
-      fishApiKey: '',
-      fishVoice: '',
-
-      // Google
-      googleServiceAccount: '', // JSON 字符串
-      googleVoice: '',
-      newtts:{}
     },
     cur_voice :'default',
     openaiVoices:['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'],
@@ -739,11 +661,11 @@ let vue_data = {
       {"name": "reasonerButton", "enabled": false},
       {"name": "deepSearchButton", "enabled": false},
       {"name": "visionButton", "enabled": false},
-      {"name": "desktopVisionButton", "enabled": true},
-      {"name": "screenshotButton", "enabled": true},
+      {"name": "desktopVisionButton", "enabled": false},
+      {"name": "screenshotButton", "enabled": false},
       {"name": "text2imgButton", "enabled": false},
-      {"name": "asrButton", "enabled": false},
-      {"name": "ttsButton", "enabled": false},
+      {"name": "asrButton", "enabled": true},
+      {"name": "ttsButton", "enabled": true},
       {"name": "knowledgeBaseButton", "enabled": false},
       {"name": "webSearchButton", "enabled": false},
       {"name": "memoryButton", "enabled": false},
@@ -760,7 +682,7 @@ let vue_data = {
       {"name": "a2aButton", "enabled": false},
       {"name": "httpButton", "enabled": false},
       {"name": "comfyuiButton", "enabled": false},
-      {"name": "vrmButton", "enabled": false},
+      {"name": "vrmButton", "enabled": true},
       {"name": "behaviorBotton", "enabled": false}
     ],
     showVrmModelDialog: false,
@@ -1816,30 +1738,4 @@ main();`,
     logContent: '', // 日志内容
     systemVoices: [],        // 存储从后端获取的音色列表
     isLoadingSystemVoices: false, // 加载状态
-    renderTimers: {}, // 用于存储每个消息的防抖定时器
-    mathJaxQueue: Promise.resolve(), // MathJax 串行队列，防止冲突
-    isMathJaxRunning: false,
-    // --- AI 浏览器数据 ---
-    browserTabs: [
-        // 默认初始化一个新标签页
-        { 
-            id: Date.now(), 
-            title: 'New Tab', 
-            url: '', // 空 URL 表示显示欢迎页
-            favicon: '', 
-            isLoading: false,
-            canGoBack: false,
-            canGoForward: false 
-        }
-    ],
-    currentTabId: null, // 将在 created 或 mounted 中初始化
-    urlInput: '',
-    showEngineDropdown: false, // 控制下拉菜单显示
-    dropdownTimer: null, // 新增定时器变量
-    isSearchFocused: false,    // 控制搜索框聚焦样式
-    searchEngine: 'bing', // 'bing' or 'google'
-    welcomeSearchQuery: '',
-    showDownloadDropdown: false,
-    downloads: [], // 存储所有下载记录 { id, filename, totalBytes, receivedBytes, state, path, progress }
-    dropdownTimer: null, 
 };
