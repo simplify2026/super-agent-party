@@ -1,5 +1,5 @@
 const remoteMain = require('@electron/remote/main')
-const { app, BrowserWindow, ipcMain, screen, shell, dialog, Tray, Menu, session} = require('electron')
+const { app, BrowserWindow, ipcMain, screen, shell, dialog, Tray, Menu } = require('electron')
 const { clipboard, nativeImage,desktopCapturer  } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
@@ -20,7 +20,7 @@ let isMac = process.platform === 'darwin';
 const vmcSendSocket = dgram.createSocket('udp4'); // 发送复用同一 socket
 const MAX_LOG_LINES = 2000; // 保留最近2000行日志
 let logBuffer = []; // 内存日志缓冲区
-let activeDownloads = new Map(); 
+
 function appendLogToBuffer(source, data) {
   const timestamp = new Date().toLocaleTimeString();
   const lines = data.toString().split(/\r?\n/);
@@ -209,12 +209,6 @@ const locales = {
     supportedFiles: '支持的文件',
     allFiles: '所有文件',
     supportedimages: '支持的图片',
-    // 新增项
-    openNewTab: '在新标签页打开',
-    copyLink: '复制链接地址',
-    copyLinkText: '复制链接文本',
-    selectAll: '全选',
-    inspect: '检查元素'
   },
   'en-US': {
     show: 'Show Window',
@@ -228,12 +222,6 @@ const locales = {
     supportedFiles: 'Supported Files',
     allFiles: 'All Files',
     supportedimages: 'Supported Images',
-    // 新增项
-    openNewTab: 'Open in new tab',
-    copyLink: 'Copy link address',
-    copyLinkText: 'Copy link text',
-    selectAll: 'Select All',
-    inspect: 'Inspect'
   }
 };
 const ALLOWED_EXTENSIONS = [
@@ -294,7 +282,7 @@ function isPortAvailable(port) {
 }
 
 // 新增：查找可用端口
-async function findAvailablePort(startPort = DEFAULT_PORT, maxAttempts = 20000) {
+async function findAvailablePort(startPort = DEFAULT_PORT, maxAttempts = 1000) {
   for (let i = 0; i < maxAttempts; i++) {
     const port = startPort + i
     if (await isPortAvailable(port)) {
@@ -342,7 +330,6 @@ function createSkeletonWindow() {
       webSecurity: false,
       devTools: isDev,
       partition: 'persist:main-session',
-      webviewTag: true,
     }
   })
 
@@ -508,6 +495,9 @@ async function startBackend() {
   }
 }
 
+
+
+
 // 修改等待后端函数
 async function waitForBackend() {
   const MAX_RETRIES = 200
@@ -531,108 +521,6 @@ async function waitForBackend() {
   }
   throw new Error('Backend failed to start')
 }
-
-// 通用下载处理函数
-function handleDownloadItem(event, item, webContents) {
-  // 获取主窗口用于发送消息
-  const win = BrowserWindow.getAllWindows()[0];
-  if (!win) return;
-
-  const downloadId = Date.now().toString();
-  
-  // ★ 这里直接使用最上面定义的 activeDownloads
-  // 如果这里报错，说明你没在文件顶部加 let activeDownloads = new Map();
-  activeDownloads.set(downloadId, item);
-
-  const fileName = item.getFilename();
-  const filePath = item.getSavePath();
-
-  // 1. 发送开始事件
-  win.webContents.send('download-started', {
-      id: downloadId,
-      filename: fileName,
-      totalBytes: item.getTotalBytes(),
-      path: filePath
-  });
-
-  // 2. 监听状态更新
-  item.on('updated', (event, state) => {
-      if (state === 'interrupted') {
-          win.webContents.send('download-updated', { id: downloadId, state: 'interrupted' });
-      } else if (state === 'progressing') {
-          if (item.isPaused()) {
-              win.webContents.send('download-updated', { id: downloadId, state: 'paused' });
-          } else {
-              win.webContents.send('download-updated', {
-                  id: downloadId,
-                  state: 'progressing',
-                  receivedBytes: item.getReceivedBytes(),
-                  totalBytes: item.getTotalBytes(),
-                  progress: item.getTotalBytes() > 0 ? item.getReceivedBytes() / item.getTotalBytes() : 0
-              });
-          }
-      }
-  });
-
-  // 3. 监听完成
-  item.once('done', (event, state) => {
-      win.webContents.send('download-done', {
-          id: downloadId,
-          state: state,
-          path: item.getSavePath()
-      });
-      // 下载完成，移除引用
-      activeDownloads.delete(downloadId);
-  });
-}
-
-// 2. 修改监听函数，同时监听两个会话
-function setupDownloadListener(win) {
-    
-    // A. 监听主窗口默认会话 (用于应用自身的下载)
-    win.webContents.session.on('will-download', (event, item, webContents) => {
-        handleDownloadItem(win, event, item, webContents);
-    });
-
-    // B. ★★★ 关键修复：监听 Webview 的隔离会话 ★★★
-    // 这里的字符串必须和你 HTML 里 <webview partition="..."> 的值一模一样！
-    // 你之前的代码里写的是 'persist:browser-session'
-    const webviewSession = session.fromPartition('persist:browser-session');
-    
-    webviewSession.on('will-download', (event, item, webContents) => {
-        // 让主窗口 (win) 去通知渲染进程
-        handleDownloadItem(win, event, item, webContents);
-    });
-}
-
-
-// 处理前端发来的控制指令 (暂停/继续/取消)
-ipcMain.handle('download-control', (event, { id, action }) => {
-  // ★ 同样使用顶部的 activeDownloads
-  const item = activeDownloads.get(id);
-  
-  if (!item) {
-    console.log(`未找到下载任务 ID: ${id}`);
-    return;
-  }
-
-  switch (action) {
-    case 'pause':
-      if (!item.isPaused()) item.pause();
-      break;
-    case 'resume':
-      if (item.canResume()) item.resume();
-      break;
-    case 'cancel':
-      item.cancel();
-      break;
-  }
-});
-
-// 打开文件所在文件夹
-ipcMain.handle('show-item-in-folder', (event, filePath) => {
-    if(filePath) shell.showItemInFolder(filePath);
-});
 
 // 配置自动更新
 function setupAutoUpdater() {
@@ -693,19 +581,6 @@ ipcMain.handle('get-window-size', (event) => {
 // 只有在获得锁（第一个实例）时才执行初始化
 app.whenReady().then(async () => {
   try {
-    app.on('session-created', (sess) => {
-        // console.log('发现新 Session 创建:', sess.getUserAgent()); 
-        
-        // 给每一个新创建的会话（包括 webview 的）都挂上下载监听
-        sess.on('will-download', (event, item, webContents) => {
-            console.log('捕获到下载请求 (来自 Webview/Session):', item.getFilename());
-            handleDownloadItem(event, item, webContents);
-        });
-    });
-    session.defaultSession.on('will-download', (event, item, webContents) => {
-        console.log('捕获到下载请求 (来自主窗口):', item.getFilename());
-        handleDownloadItem(event, item, webContents);
-    });    
       // 默认配置
     global.vmcCfg = {
       receive: { enable: false, port: 39539,syncExpression: false },
@@ -762,7 +637,6 @@ app.whenReady().then(async () => {
           nodeIntegration: false,
           sandbox: false,
           webSecurity: false,
-          webviewTag: true,
           devTools: isDev,
           preload: path.join(__dirname, 'static/js/preload.js')
         }
@@ -1115,10 +989,15 @@ app.whenReady().then(async () => {
         // 3. 现在再改助手尺寸，系统不会再覆盖
         win.setSize(width, height, true);
       } else {
+        // 进入助手模式时，将窗口移动到最右侧
+        const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+        const x = screenWidth - width - 0; // 右侧边距0像素
+        const y = 0; // 顶部对齐
+
         if (isMac) {
             win.maximize();
         }else{
-            win.setSize(width, height, true);
+            win.setBounds({ x, y, width, height }, true);
         }
       }
     });
@@ -1211,31 +1090,20 @@ app.whenReady().then(async () => {
     }
 
     // 修改 show-context-menu 的 IPC 处理
-
     ipcMain.handle('show-context-menu', async (event, { menuType, data }) => {
-      let menuTemplate = [];
-      const win = BrowserWindow.fromWebContents(event.sender);
+      let menuTemplate;
       
-      // 直接使用 locales[currentLanguage]
-      const lang = locales[currentLanguage]; 
-
-      // --- A. 图片菜单 ---
-      if (menuType === 'image') {
+    if (menuType === 'image') {
         menuTemplate = [
           {
-            label: lang.openNewTab,
-            click: () => {
-              win.webContents.send('create-tab', data.src);
-            }
-          },
-          { type: 'separator' },
-          {
-            label: lang.copyImageLink,
+            label: locales[currentLanguage].copyImageLink,
             click: () => clipboard.writeText(data.src)
           },
           {
-            label: lang.copyImage,
+            label: locales[currentLanguage].copyImage,
             click: async () => {
+              // 恢复为最基础、最稳定的图片复制（仅像素数据）
+              // 解决之前写入文件路径导致的兼容性问题
               try {
                 if (data.src.startsWith('data:')) {
                   const image = nativeImage.createFromDataURL(data.src);
@@ -1255,31 +1123,43 @@ app.whenReady().then(async () => {
               }
             }
           },
+          // ★ 新增：图片另存为功能
           {
-            label: lang.saveImageAs,
+            label: locales[currentLanguage].saveImageAs,
             click: async () => {
               try {
+                const win = BrowserWindow.fromWebContents(event.sender);
                 let buffer = null;
                 let defaultExtension = 'png';
 
+                // 1. 获取图片数据 Buffer
                 if (data.src.startsWith('data:')) {
+                  // 处理 Base64
                   const image = nativeImage.createFromDataURL(data.src);
                   buffer = image.toPNG();
+                  defaultExtension = 'png';
                 } else if (data.src.startsWith('http')) {
+                  // 处理网络图片
                   const response = await fetch(data.src);
                   const blob = await response.blob();
                   buffer = Buffer.from(await blob.arrayBuffer());
-                  const lowerSrc = data.src.toLowerCase();
-                  if (lowerSrc.endsWith('.jpg') || lowerSrc.endsWith('.jpeg')) defaultExtension = 'jpg';
-                  else if (lowerSrc.endsWith('.gif')) defaultExtension = 'gif';
-                  else if (lowerSrc.endsWith('.webp')) defaultExtension = 'webp';
+                  // 简单猜测扩展名，默认 png
+                  if (data.src.toLowerCase().endsWith('.jpg') || data.src.toLowerCase().endsWith('.jpeg')) {
+                    defaultExtension = 'jpg';
+                  } else if (data.src.toLowerCase().endsWith('.gif')) {
+                    defaultExtension = 'gif';
+                  } else if (data.src.toLowerCase().endsWith('.webp')) {
+                    defaultExtension = 'webp';
+                  }
                 } else {
+                  // 处理本地文件
                   buffer = fs.readFileSync(data.src);
                   defaultExtension = path.extname(data.src).replace('.', '') || 'png';
                 }
 
+                // 2. 弹出保存对话框
                 const { filePath } = await dialog.showSaveDialog(win, {
-                  title: lang.saveImageAs,
+                  title: locales[currentLanguage].saveImageAs,
                   defaultPath: `image_${Date.now()}.${defaultExtension}`,
                   filters: [
                     { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
@@ -1287,8 +1167,11 @@ app.whenReady().then(async () => {
                   ]
                 });
 
+                // 3. 写入文件
                 if (filePath) {
                   fs.writeFileSync(filePath, buffer);
+                  // 可选：提示保存成功，或者不做打扰
+                  // console.log('图片已保存至:', filePath);
                 }
               } catch (error) {
                 console.error('图片另存为失败:', error);
@@ -1297,68 +1180,18 @@ app.whenReady().then(async () => {
             }
           }
         ];
-      } 
-      // --- B. 链接菜单 ---
-      else if (menuType === 'link') {
+      } else {
+        // 原有基础菜单
         menuTemplate = [
-          {
-            label: lang.openNewTab,
-            click: () => {
-              win.webContents.send('create-tab', data.url);
-            }
-          },
-          { type: 'separator' },
-          {
-            label: lang.copyLink,
-            click: () => clipboard.writeText(data.url)
-          },
-          {
-            label: lang.copyLinkText,
-            click: () => clipboard.writeText(data.text || '')
-          }
+          { label: locales[currentLanguage].cut, role: 'cut' },
+          { label: locales[currentLanguage].copy, role: 'copy' },
+          { label: locales[currentLanguage].paste, role: 'paste' }
         ];
-      }
-      // --- C. 纯文本/选区菜单 ---
-      else if (menuType === 'text') {
-        menuTemplate = [
-          { label: lang.copy, role: 'copy' },
-          { 
-            label: `Search "${data.text.length > 15 ? data.text.slice(0, 15) + '...' : data.text}"`,
-            click: () => {
-              const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(data.text)}`;
-              win.webContents.send('create-tab', searchUrl);
-            } 
-          },
-          { type: 'separator' },
-          { label: lang.selectAll, role: 'selectAll' }
-        ];
-      }
-      // --- D. 默认/空白处菜单 ---
-      else {
-        menuTemplate = [
-          { label: lang.cut, role: 'cut' },
-          { label: lang.copy, role: 'copy' },
-          { label: lang.paste, role: 'paste' },
-          { type: 'separator' },
-          { label: lang.selectAll, role: 'selectAll' }
-        ];
-      }
-
-      // --- E. 开发模式下添加检查元素 ---
-      if (isDev) {
-        menuTemplate.push({ type: 'separator' });
-        menuTemplate.push({
-          label: lang.inspect,
-          click: () => {
-            win.webContents.openDevTools({ mode: 'detach' });
-          }
-        });
       }
 
       menu = Menu.buildFromTemplate(menuTemplate);
-      menu.popup({ window: win });
+      menu.popup(BrowserWindow.fromWebContents(event.sender));
     });
-
     // 监听关闭事件
     ipcMain.handle('request-stop-qqbot', async (event) => {
       const win = BrowserWindow.getAllWindows()[0]; // 获取主窗口
@@ -1585,38 +1418,33 @@ function updatecontextMenu() {
   ]);
 }
 
-// app.on('web-contents-created', (e, webContents) => {
-//   webContents.on('new-window', (event, url) => {
-//   event.preventDefault();
-//   shell.openExternal(url);
-//   });
-// });
-
-app.on('web-contents-created', (event, contents) => {
-  // 拦截所有新窗口请求（包括 <webview> 内部的 window.open 和 target="_blank"）
-  contents.setWindowOpenHandler((details) => {
-    const { url } = details;
-    
-    // 如果主窗口还在，就通知主窗口里的 Vue 页面去创建新标签
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('create-tab', url);
-    }
-    
-    // 坚决阻止 Electron 创建原生弹窗
-    return { action: 'deny' };
+app.on('web-contents-created', (e, webContents) => {
+  webContents.on('new-window', (event, url) => {
+  event.preventDefault();
+  shell.openExternal(url);
   });
+});
 
-  // (保留你原有的代码：拦截侧键后退等)
-  contents.on('input-event', (_ev, input) => {
+// 禁用所有 WebContents 的前进/后退
+app.on('web-contents-created', (_event, wc) => {
+  // 1. 拦截鼠标侧键 / 触摸板手势
+  wc.on('input-event', (_ev, input) => {
+    // 浏览器侧键对应的 button 是 3（后退）和 4（前进）
     if (input.type === 'mouseDown' && (input.button === 3 || input.button === 4)) {
-      contents.stopNavigation();
+      // 阻止默认行为（相当于把事件吃掉）
+      wc.stopNavigation();
+      return;
     }
   });
-  contents.on('before-input-event', (_ev, input) => {
+
+  // 2. 拦截 Alt+Left / Alt+Right 快捷键
+  wc.on('before-input-event', (_ev, input) => {
     const { alt, key } = input;
     if (alt && (key === 'Left' || key === 'Right')) {
+      // 标记为已处理，Electron 就不会再分发
       input.preventDefault = true;
     }
   });
 });
+
 app.commandLine.appendSwitch('disable-http-cache');
