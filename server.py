@@ -1,8 +1,5 @@
 # -- coding: utf-8 --
 import sys
-import traceback
-
-import requests
 sys.stdout.reconfigure(encoding='utf-8')
 import base64
 from datetime import datetime
@@ -16,12 +13,8 @@ import socket
 import sys
 import tempfile
 import httpx
-import socket
-import ipaddress
-from urllib.parse import urlparse, urlunparse, urljoin
-from urllib.robotparser import RobotFileParser
 import websockets
-from py.load_files import check_robots_txt, get_file_content, is_private_ip, sanitize_url
+from py.load_files import get_file_content
 def fix_macos_environment():
     """
     专门修复 macOS 下找不到 node (nvm) 和 uv (python framework) 的问题
@@ -861,7 +854,7 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
     if request.messages[-1]['role'] == 'system' and settings['tools']['autoBehavior']['enabled']:
         language_message = f"\n\n当你看到被插入到对话之间的系统消息，这是自主行为系统向你发送的消息，例如用户主动或者要求你设置了一些定时任务或者延时任务，当你看到自主行为系统向你发送的消息时，说明这些任务到了需要被执行的节点，例如：用户要你三点或五分钟后提醒开会的事情，然后当你看到一个被插入的“提醒用户开会”的系统消息，你需要立刻提醒用户开会，以此类推\n\n"
         content_append(request.messages, 'system', language_message)
-    if settings['ttsSettings']['newtts'] and settings['ttsSettings']['enabled'] and settings['memorySettings']['is_memory'] == True:
+    if settings['ttsSettings']['newtts'] and settings['ttsSettings']['enabled']:
         # 遍历settings['ttsSettings']['newtts']，获取所有包含enabled: true的key
         for key in settings['ttsSettings']['newtts']:
             if settings['ttsSettings']['newtts'][key]['enabled']:
@@ -2923,6 +2916,7 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                 return
             except Exception as e:
                 logger.error(f"Error occurred: {e}")
+                import traceback
                 traceback.print_exc()
                 # 捕获异常并返回错误信息
                 error_chunk = {
@@ -4149,113 +4143,6 @@ async def simple_chat_endpoint(request: ChatRequest):
         headers={"Cache-Control": "no-cache"}
     )
 
-def sanitize_proxy_url(input_url: str) -> str:
-    """
-    针对代理场景优化的 URL 安全过滤
-    """
-    if not input_url:
-        raise HTTPException(status_code=400, detail="URL 不能为空")
-    
-    # 1. 解析 URL
-    parsed = urlparse(input_url)
-    
-    # 2. 验证协议 (禁止 file://, gopher:// 等协议)
-    if parsed.scheme not in ["http", "https"]:
-        raise HTTPException(status_code=400, detail="仅支持 http 或 https 协议")
-    
-    if not parsed.netloc:
-        raise HTTPException(status_code=400, detail="无效的域名或 IP")
-
-    # 3. 重新构造 URL (消除 SSRF 污点)
-    # 排除 userinfo, 只保留必要部分
-    safe_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-    if parsed.query:
-        safe_url += f"?{parsed.query}"
-    if parsed.fragment:
-        safe_url += f"#{parsed.fragment}"
-
-    # 4. 内网审计
-    if is_private_ip(parsed.hostname):
-        logger.warning(f"Internal access detected: {safe_url}")
-
-    return safe_url
-
-# 建议 UA 包含项目地址
-USER_AGENT = "Mozilla/5.0 (compatible; OpenSourceProxyBot/1.0)"
-ROBOTS_CACHE = {}
-
-# ================= 2. 修改后的代理路由 =================
-
-@app.api_route("/extension_proxy", methods=["GET", "POST"])
-async def extension_proxy(request: Request, url: str):
-    """
-    集成安全校验与 Robots 协议的代理接口
-    """
-    # --- 阶段 A: 安全校验 ---
-    try:
-        target_url = sanitize_proxy_url(url)
-    except HTTPException as e:
-        return Response(content=e.detail, status_code=e.status_code)
-
-    # --- 阶段 B: 合规性校验 (Robots.txt) ---
-    is_allowed = await check_robots_txt(target_url)
-    if not is_allowed:
-        return Response(
-            content="Access denied by robots.txt", 
-            status_code=403,
-            media_type="text/plain"
-        )
-
-    # --- 阶段 C: 执行代理请求 ---
-    method = request.method
-    body = await request.body()
-    
-    # 构造 Header
-    excluded_headers = {'host', 'content-length', 'connection', 'keep-alive'}
-    headers = {
-        k: v for k, v in request.headers.items() 
-        if k.lower() not in excluded_headers
-    }
-    headers["User-Agent"] = USER_AGENT
-    
-    print(f"--- [Extension Proxy] ---")
-    print(f"Safe Target: {target_url} | Method: {method}")
-    
-    # 使用 trust_env=False 进一步防止被环境变量代理干扰（SSRF 防御一部分）
-    async with httpx.AsyncClient(verify=False, follow_redirects=True, timeout=30.0, trust_env=False) as client:
-        try:
-            resp = await client.request(
-                method=method,
-                url=target_url,
-                headers=headers,
-                content=body
-            )
-            
-            # 透传响应头
-            resp_headers = {
-                k: v for k, v in resp.headers.items()
-                if k.lower() not in {'content-encoding', 'content-length', 'transfer-encoding', 'server'}
-            }
-            
-            return Response(
-                content=resp.content,
-                status_code=resp.status_code,
-                headers=resp_headers,
-                media_type=resp.headers.get("content-type", "application/octet-stream")
-            )
-
-        except httpx.ConnectError as e:
-            err_msg = f"Proxy Connect Error: {e}"
-            if "json" in request.headers.get("accept", "").lower():
-                 return Response(content=f'{{"error": "{err_msg}"}}', status_code=502, media_type="application/json")
-            return Response(content=f"<error>{err_msg}</error>", status_code=502, media_type="text/xml")
-            
-        except Exception as e:
-            print(f"[Proxy Error] System: {repr(e)}")
-            traceback.print_exc()
-            return Response(content="Internal Server Error during proxy", status_code=500)
-
-        
 # 存储活跃的ASR WebSocket连接
 asr_connections = []
 
@@ -4418,6 +4305,7 @@ async def funasr_recognize(audio_data: bytes, funasr_settings: dict,ws: WebSocke
             
     except Exception as e:
         print(f"FunASR recognition error: {e}")
+        import traceback
         traceback.print_exc()
         return f"FunASR识别错误: {str(e)}"
 
@@ -4651,6 +4539,7 @@ async def asr_websocket_endpoint(websocket: WebSocket):
                         print(f"ASR WebSocket disconnected: {connection_id}")
                     except Exception as e:
                         print(f"ASR WebSocket error: {e}")
+                        import traceback
                         traceback.print_exc()
     finally:
         # 清理资源
@@ -4741,6 +4630,7 @@ async def asr_transcription(
         
     except Exception as e:
         print(f"ASR HTTP interface error: {e}")
+        import traceback
         traceback.print_exc()
         
         return JSONResponse(
@@ -4847,6 +4737,7 @@ async def funasr_recognize_offline(audio_data: bytes, funasr_settings: dict) -> 
             
     except Exception as e:
         print(f"FunASR offline recognition error: {e}")
+        import traceback
         traceback.print_exc()
         return f"FunASR识别错误: {str(e)}"
 
@@ -5200,14 +5091,9 @@ async def text_to_speech(request: Request):
             custom_streaming = tts_settings.get('customStream', False)
             
             async def generate_audio():
-                safe_tts_url = sanitize_url(
-                    input_url=custom_tt_server,
-                    default_base="http://127.0.0.1:9880", # 这里填你代码里原本的默认 TTS 地址
-                    endpoint=""  # 因为 TTS URL 通常已经包含了路径
-                )
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     try:
-                        async with client.stream("GET", safe_tts_url, params=params) as response:
+                        async with client.stream("GET", custom_tt_server, params=params) as response:
                             response.raise_for_status()
                             
                             if custom_streaming:
@@ -5294,14 +5180,9 @@ async def text_to_speech(request: Request):
             gsvServer = gsvServer_list[index % len(gsvServer_list)]
                 
             async def generate_audio():
-                safe_tts_url = sanitize_url(
-                    input_url=gsvServer,
-                    default_base="http://127.0.0.1:9880", # 这里填你代码里原本的默认 TTS 地址
-                    endpoint="/tts"  # 因为 TTS URL 通常已经包含了路径
-                )
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     try:
-                        async with client.stream("POST", safe_tts_url, json=gsv_params) as response:
+                        async with client.stream("POST", f"{gsvServer}/tts", json=gsv_params) as response:
                             response.raise_for_status()
                             # 直接流式返回，不管目标格式（假设GSV的ogg内部是opus编码）
                             async for chunk in response.aiter_bytes():
@@ -5573,458 +5454,69 @@ async def text_to_speech(request: Request):
                 }
             )
         
-        # ==========================================
-        # Tetos 统一处理逻辑 (Azure, Volc, Baidu, etc.)
-        # ==========================================
-        elif tts_engine in ['azure', 'volcengine', 'baidu', 'minimax', 'xunfei', 'fish', 'google']:
-            import traceback # 用于打印报错堆栈
-            import uuid
-            # 1. 准备临时文件路径
-            unique_suffix = uuid.uuid4().hex[:8]
-            os.makedirs(TOOL_TEMP_DIR, exist_ok=True)
-            temp_filename = os.path.join(TOOL_TEMP_DIR, f"temp_tetos_{index}_{unique_suffix}.mp3")
-
-            print(f"[DEBUG] 准备调用 Tetos: 引擎={tts_engine}, 临时文件={temp_filename}")
-
-            # 2. 定义同步生成函数 (将在线程池运行)
-            def run_tetos_sync():
-                try:
-                    speaker = None
-                    
-                    # === 统一获取音色 ===
-                    # 如果前端传来的 voice 是空字符串，设为 None，否则 SDK 可能报错
-                    selected_voice = tts_settings.get(f'{tts_engine}Voice', '')
-                    if not selected_voice:
-                        selected_voice = None
-                        
-                    print(f"[DEBUG] 初始化 Speaker: {tts_engine}, 音色: {selected_voice}")
-
-                    # === 1. Azure ===
-                    if tts_engine == 'azure':
-                        from tetos.azure import AzureSpeaker
-                        speaker = AzureSpeaker(
-                            speech_key=tts_settings.get('azureSpeechKey', ''),
-                            speech_region=tts_settings.get('azureRegion', ''),
-                            voice=selected_voice  # 在初始化时传入
-                        )
-                    
-                    # === 2. Volcengine (火山) ===
-                    elif tts_engine == 'volcengine':
-                        from tetos.volc import VolcSpeaker
-                        speaker = VolcSpeaker(
-                            access_key=tts_settings.get('volcAccessKey', ''),
-                            secret_key=tts_settings.get('volcSecretKey', ''),
-                            app_key=tts_settings.get('volcAppKey', ''),
-                            voice=selected_voice  # 在初始化时传入
-                        )
-
-                    # === 3. Baidu ===
-                    elif tts_engine == 'baidu':
-                        from tetos.baidu import BaiduSpeaker
-                        speaker = BaiduSpeaker(
-                            api_key=tts_settings.get('baiduApiKey', ''),
-                            secret_key=tts_settings.get('baiduSecretKey', ''),
-                            voice=selected_voice  # 在初始化时传入
-                        )
-
-                    # === 4. Minimax ===
-                    elif tts_engine == 'minimax':
-                        from tetos.minimax import MinimaxSpeaker
-                        speaker = MinimaxSpeaker(
-                            api_key=tts_settings.get('minimaxApiKey', ''),
-                            group_id=tts_settings.get('minimaxGroupId', ''),
-                            voice=selected_voice  # 在初始化时传入
-                        )
-
-                    # === 5. Xunfei (讯飞) ===
-                    elif tts_engine == 'xunfei':
-                        from tetos.xunfei import XunfeiSpeaker
-                        speaker = XunfeiSpeaker(
-                            app_id=tts_settings.get('xunfeiAppId', ''),
-                            api_key=tts_settings.get('xunfeiApiKey', ''),
-                            api_secret=tts_settings.get('xunfeiApiSecret', ''),
-                            voice=selected_voice  # 在初始化时传入
-                        )
-                    
-                    # === 6. Fish Audio ===
-                    elif tts_engine == 'fish':
-                        from tetos.fish import FishSpeaker
-                        speaker = FishSpeaker(
-                            api_key=tts_settings.get('fishApiKey', ''),
-                            voice=selected_voice  # 在初始化时传入
-                        )
-
-                    # === 7. Google ===
-                    elif tts_engine == 'google':
-                        from tetos.google import GoogleSpeaker
-                        # Google 需要先处理鉴权文件
-                        sa_json = tts_settings.get('googleServiceAccount', '')
-                        if sa_json:
-                            import json
-                            import tempfile
-                            with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp:
-                                tmp.write(sa_json)
-                                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
-                        
-                        speaker = GoogleSpeaker(
-                            voice=selected_voice # 在初始化时传入
-                        )
-
-                    if not speaker:
-                        raise Exception(f"无法初始化 {tts_engine} Speaker (对象为空)")
-
-                    # === 执行合成 ===
-                    # 因为 voice 已经在初始化时传入了，这里不再传 voice 参数
-                    print(f"[DEBUG] 开始合成文本 (长度: {len(text)})...")
-                    speaker.say(text, temp_filename)
-                    print(f"[DEBUG] 合成完成，文件已生成: {temp_filename}")
-
-                except Exception as e:
-                    print(f"[ERROR] Tetos 合成线程内部报错: {str(e)}")
-                    traceback.print_exc()
-                    raise e
-
-            # 3. 异步执行合成
-            try:
-                await asyncio.to_thread(run_tetos_sync)
-            except Exception as e:
-                print(f"[ERROR] Tetos 异步调用失败: {str(e)}")
-                raise HTTPException(status_code=500, detail=f"TTS合成失败: {str(e)}")
-
-            # 4. 读取文件并返回流
-            if not os.path.exists(temp_filename):
-                raise HTTPException(status_code=500, detail="合成文件未生成")
-
-            async def generate_audio_from_file():
-                try:
-                    with open(temp_filename, "rb") as f:
-                        file_data = f.read()
-                    
-                    if target_format == "opus":
-                        # 假设 convert_to_opus_simple 是可用的
-                        opus_data = await convert_to_opus_simple(file_data)
-                        chunk_size = 4096
-                        for i in range(0, len(opus_data), chunk_size):
-                            yield opus_data[i:i + chunk_size]
-                    else:
-                        chunk_size = 4096
-                        for i in range(0, len(file_data), chunk_size):
-                            yield file_data[i:i + chunk_size]
-                except Exception as stream_e:
-                     print(f"[ERROR] 流式读取/转换失败: {str(stream_e)}")
-                finally:
-                    if os.path.exists(temp_filename):
-                        try:
-                            os.remove(temp_filename)
-                        except:
-                            pass
-
-            # 设置响应头
-            if target_format == "opus":
-                media_type = "audio/ogg"
-                filename = f"tts_{index}.opus"
-            else:
-                media_type = "audio/mpeg"
-                filename = f"tts_{index}.mp3"
-
-            return StreamingResponse(
-                generate_audio_from_file(),
-                media_type=media_type,
-                headers={
-                    "Content-Disposition": f"inline; filename={filename}",
-                    "X-Audio-Index": str(index),
-                    "X-Audio-Format": target_format
-                }
-            )
-
         raise HTTPException(status_code=400, detail="不支持的TTS引擎")
     
     except Exception as e:
-        print(f"[ERROR] TTS 合成失败: {str(e)}")
-        traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": f"服务器内部错误: {str(e)}"})
-
-@app.post("/tts/tetos/list_voices")
-async def list_tetos_voices(request: Request):
-    """
-    通过 tetos 获取音色列表
-    流程: 接收配置 -> 实例化 Speaker -> 调用 .list_voices()
-    """
-    try:
-        data = await request.json()
-        provider = data.get('provider', '').lower()
-        config = data.get('config', {})  # 用户填写的鉴权信息
-
-        if not provider:
-            return JSONResponse(status_code=400, content={"error": "缺少 'provider' 参数"})
-
-        # 定义同步执行函数（在线程池运行，避免阻塞）
-        def _sync_fetch_voices():
-            voices = []
-
-            # ---------------------------
-            # Azure TTS
-            # ---------------------------
-            if provider == 'azure':
-                from tetos.azure import AzureSpeaker
-                # 实例化
-                speaker = AzureSpeaker(
-                    speech_key=config.get('speech_key') or config.get('api_key'),
-                    speech_region=config.get('speech_region') or config.get('region')
-                )
-                # 获取列表
-                voices = speaker.list_voices()
-
-            # ---------------------------
-            # Volcengine (火山引擎)
-            # ---------------------------
-            elif provider == 'volcengine':
-                from tetos.volc import VolcSpeaker
-                speaker = VolcSpeaker(
-                    access_key=config.get('access_key'),
-                    secret_key=config.get('secret_key'),
-                    app_key=config.get('app_key')
-                )
-                voices = speaker.list_voices()
-
-            # ---------------------------
-            # Baidu TTS
-            # ---------------------------
-            elif provider == 'baidu':
-                from tetos.baidu import BaiduSpeaker
-                speaker = BaiduSpeaker(
-                    api_key=config.get('api_key'),
-                    secret_key=config.get('secret_key')
-                )
-                voices = speaker.list_voices()
-
-            # ---------------------------
-            # Minimax TTS
-            # ---------------------------
-            elif provider == 'minimax':
-                from tetos.minimax import MinimaxSpeaker
-                speaker = MinimaxSpeaker(
-                    api_key=config.get('api_key'),
-                    group_id=config.get('group_id')
-                )
-                voices = speaker.list_voices()
-
-            # ---------------------------
-            # 讯飞 (Xunfei)
-            # ---------------------------
-            elif provider == 'xunfei':
-                from tetos.xunfei import XunfeiSpeaker
-                speaker = XunfeiSpeaker(
-                    app_id=config.get('app_id'),
-                    api_key=config.get('api_key'),
-                    api_secret=config.get('api_secret')
-                )
-                voices = speaker.list_voices()
-
-            elif provider == 'fish':
-                api_key = config.get('api_key')
-                if not api_key:
-                    raise ValueError("Fish Audio 需要配置 API Key")
-
-                # 请求 Fish Audio 官方 API
-                # page_size 设置为 30 以获取更多热门音色
-                url = "https://api.fish.audio/model?page_size=30&page_number=1&sort_by=score"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "User-Agent": "Mozilla/5.0" 
-                }
-                
-                response = requests.get(url, headers=headers, timeout=60)
-                response.raise_for_status() # 检查 HTTP 错误
-                res_json = response.json()
-                
-                # 解析返回的数据结构
-                items = res_json.get("items", [])
-                
-                for item in items:
-                    # 将 Fish Audio 的数据结构转换为前端通用的结构
-                    # 前端 getVoiceValue 优先找 id
-                    # 前端 getVoiceLabel 优先找 DisplayName 或 name
-                    # 前端 getVoiceDesc 优先找 Locale
-                    voices.append({
-                        "id": item.get("_id"),            # 关键：这是实际的 voice ID
-                        "name": item.get("title"),        # 显示名称
-                        "DisplayName": item.get("title"), # 兼容字段
-                        "Locale": item.get("languages", ["Unknown"])[0] if item.get("languages") else "" # 语言标签
-                    })
-
-
-            # ---------------------------
-            # Google TTS
-            # ---------------------------
-            elif provider == 'google':
-                from tetos.google import GoogleSpeaker
-                # Google 特殊处理：tetos 依赖 GOOGLE_APPLICATION_CREDENTIALS 环境变量
-                # 如果 config 传了 service_account 的 json 对象，我们需要临时写入文件
-                
-                service_account_data = config.get('service_account')
-                temp_path = None
-                
-                try:
-                    if service_account_data:
-                        # 创建临时文件
-                        with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp:
-                            if isinstance(service_account_data, dict):
-                                json.dump(service_account_data, tmp)
-                            else:
-                                tmp.write(str(service_account_data))
-                            temp_path = tmp.name
-                        
-                        # 设置环境变量
-                        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_path
-                    
-                    # GoogleSpeaker 初始化通常不需要参数，它自己去读环境变量
-                    speaker = GoogleSpeaker()
-                    voices = speaker.list_voices()
-                    
-                finally:
-                    # 清理工作
-                    if temp_path:
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                        # 如果是我们设置的环境变量，用完删除，以免影响其他请求
-                        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") == temp_path:
-                            del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-
-            else:
-                raise ValueError(f"不支持的 tetos 提供商: {provider}")
-
-            return voices
-
-        # 使用 asyncio.to_thread 放入线程池执行，防止阻塞 FastAPI 主循环
-        voice_list = await asyncio.to_thread(_sync_fetch_voices)
-
-        return JSONResponse(content={
-            "status": "success",
-            "provider": provider,
-            "data": voice_list
-        })
-
-    except Exception as e:
-        print(f"获取 {provider} 音色列表失败: {e}")
-        # 捕获鉴权失败、网络错误等
-        return JSONResponse(status_code=500, content={
-            "status": "error", 
-            "message": str(e),
-            "detail": f"获取 {provider} 音色列表失败，请检查密钥配置是否正确。"
-        })
 
 @app.get("/system/voices")
 async def get_system_voices():
     """
     获取系统可用的 pyttsx3 音色列表。
-    优化版：
-    1. 优先展示 Siri/Premium 高质量音色
-    2. 自动从 ID 中补全缺失的语言标识
-    3. 为高质量音色添加 [Siri] 前缀
+    返回格式适配前端下拉框组件。
     """
     import pyttsx3
-    import sys
-    import re
-
+    # 定义同步函数，用于提取音色信息
     def fetch_voices_sync():
         try:
-            # 1. 仍然保留怪诞音色黑名单 (这些声音确实没法用)
-            mac_novelty_voices = {
-                'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
-                'Deranged', 'Good News', 'Hysterical', 'Pipe Organ', 'Trinoids', 
-                'Whisper', 'Zarvox', 'Organ'
-            }
-
+            # 初始化引擎
+            # 注意：在某些服务器环境(无音频设备)下初始化可能会失败，需要捕获异常
             engine = pyttsx3.init()
             voices = engine.getProperty('voices')
             
-            processed_voices = []
-
+            voice_list = []
             for v in voices:
-                voice_name = v.name
-                voice_id = str(v.id) # 确保是字符串
-                lower_id = voice_id.lower()
-
-                # --- 过滤逻辑 ---
-                if sys.platform == 'darwin':
-                    if voice_name in mac_novelty_voices:
-                        continue
-                    
-                    # 【重要修改】不要再过滤 'siri' 了！
-                    # 我们只过滤那些完全无法使用的（通常 id 极其简短或是无效引用）
-                    # 但保留包含 'siri', 'premium', 'compact' 的 ID
-
-                # --- 语言解析逻辑 (增强版) ---
+                # 尝试获取语言信息，有些引擎返回的是列表，有些是字节
                 lang = "Unknown"
-                
-                # 优先尝试从 pyttsx3 属性获取
                 if hasattr(v, 'languages') and v.languages:
-                    raw_lang = v.languages[0] if isinstance(v.languages, list) else v.languages
-                    if isinstance(raw_lang, bytes):
-                        try:
-                            lang = raw_lang.decode('utf-8', errors='ignore').replace('\x05', '')
-                        except:
-                            lang = str(raw_lang)
+                    # 处理不同平台返回的语言格式差异
+                    if isinstance(v.languages, list) and len(v.languages) > 0:
+                        lang = str(v.languages[0])
                     else:
-                        lang = str(raw_lang)
+                        lang = str(v.languages)
 
-                # 【补全逻辑】如果属性里读不到语言，尝试从 ID 里正则提取
-                # macOS 的 ID 通常长这样: com.apple.speech.synthesis.voice.zh_CN.ting-ting.premium
-                if lang == "Unknown" or lang == "":
-                    # 匹配 .zh_CN. 或 .en_US. 这种模式
-                    match = re.search(r'\.([a-z]{2}[_-][A-Z]{2})\.', voice_id)
-                    if match:
-                        lang = match.group(1).replace('_', '-') # 统一格式为 zh-CN
-
-                # --- 判断是否为 Siri/高质量音色 ---
-                # 关键词：siri, premium (高品质), compact (压缩的高品质，通常是系统默认下载的)
-                is_high_quality = False
-                quality_tag = ""
-                
-                if any(k in lower_id for k in ['siri', 'premium', 'compact']):
-                    is_high_quality = True
-                    quality_tag = "[Siri/Premium] "
-                
-                # 有些系统直接在名字里就叫 "Siri Voice 1"
-                if "siri" in voice_name.lower():
-                    is_high_quality = True
-                    quality_tag = "[Siri] "
-
-                # 组装数据
-                processed_voices.append({
-                    "id": voice_id,
-                    "name": f"{quality_tag}{voice_name}", # 在名字前加上标识，方便前端展示
-                    "original_name": voice_name,
-                    "lang": lang,
-                    "gender": getattr(v, 'gender', 'Unknown'),
-                    "is_siri": is_high_quality # 用于排序的标记
+                voice_list.append({
+                    "id": v.id,          # 传递给后端 TTS 接口的 value
+                    "name": v.name,      # 前端显示的 label
+                    "lang": lang,        # 辅助信息：语言
+                    "gender": getattr(v, 'gender', 'Unknown') # 辅助信息：性别（如果可用）
                 })
-
-            # --- 排序逻辑 ---
-            # Python 的 sort 是稳定的。
-            # key 解释: (not x['is_siri']) -> True(1) 排后面, False(0) 排前面
-            # 所以 is_siri=True 的会排在最前面
-            processed_voices.sort(key=lambda x: (not x['is_siri'], x['lang'], x['name']))
-
-            return processed_voices
+            return voice_list
             
         except ImportError:
-            print("错误: 未找到 pyttsx3 驱动")
+            print("错误: 未找到 pyttsx3 驱动 (如 espeak, nsss, sapi5)")
+            return []
+        except RuntimeError as e:
+            print(f"pyttsx3 初始化失败: {str(e)}")
             return []
         except Exception as e:
-            print(f"获取系统音色错误: {str(e)}")
+            print(f"获取系统音色未知错误: {str(e)}")
             return []
 
     try:
+        # 在线程池中运行，避免阻塞主进程
         available_voices = await asyncio.to_thread(fetch_voices_sync)
+        
         return {
             "count": len(available_voices),
             "voices": available_voices
         }
     except Exception as e:
-        from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(
+            status_code=500, 
+            content={"error": f"无法获取音色列表: {str(e)}"}
+        )
+
 
 async def convert_to_opus_simple(audio_data):
     """使用pydub将音频转换为opus格式（适合飞书）"""
@@ -7744,32 +7236,24 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_connections.append(websocket)
 
-    # [关键点 1] 为当前连接生成唯一ID
-    connection_id = str(shortuuid.ShortUUID().random(length=8))
-    # 标记该连接是否发送过提示词（用于判断断开时是否需要发送移除指令）
-    has_sent_prompt = False
-    has_start_tts = False
-
     try:
-        async with settings_lock:
+        async with settings_lock:  # 读取时加锁
             current_settings = await load_settings()
-            if current_settings.get("conversations", None):
+            if current_settings.get("conversations",None):
                 await save_covs({"conversations": current_settings["conversations"]})
+                # 移除settings中的"conversations"
                 del current_settings["conversations"]
                 await save_settings(current_settings)
             covs = await load_covs()
             current_settings["conversations"] = covs.get("conversations", [])
-        
         await websocket.send_json({"type": "settings", "data": current_settings})
-        
         while True:
             data = await websocket.receive_json()
-            
-            # --- 常规逻辑保持不变 ---
             if data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
             elif data.get("type") == "save_settings":
                 await save_settings(data.get("data", {}))
+                # 发送确认消息（携带相同 correlationId）
                 await websocket.send_json({
                     "type": "settings_saved",
                     "correlationId": data.get("correlationId"),
@@ -7777,6 +7261,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
             elif data.get("type") == "save_conversations":
                 await save_covs(data.get("data", {}))
+                # 发送确认消息（携带相同 correlationId）
                 await websocket.send_json({
                     "type": "conversations_saved",
                     "correlationId": data.get("correlationId"),
@@ -7784,19 +7269,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
             elif data.get("type") == "get_settings":
                 settings = await load_settings()
-                if settings.get("conversations", None):
+                if settings.get("conversations",None):
                     await save_covs({"conversations": settings["conversations"]})
+                    # 移除settings中的"conversations"
                     del settings["conversations"]
                     await save_settings(settings)
                 covs = await load_covs()
+                print("covs"+covs)
                 settings["conversations"] = covs.get("conversations", [])
                 await websocket.send_json({"type": "settings", "data": settings})
             elif data.get("type") == "save_agent":
                 current_settings = await load_settings()
+                
+                # 生成智能体ID和配置路径
                 agent_id = str(shortuuid.ShortUUID().random(length=8))
                 config_path = os.path.join(AGENT_DIR, f"{agent_id}.json")
+                
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(current_settings, f, indent=4, ensure_ascii=False)
+                
+                # 更新主配置
                 current_settings['agents'][agent_id] = {
                     "id": agent_id,
                     "name": data['data']['name'],
@@ -7805,77 +7297,61 @@ async def websocket_endpoint(websocket: WebSocket):
                     "enabled": False,
                 }
                 await save_settings(current_settings)
-                await websocket.send_json({"type": "settings", "data": current_settings})
-            
+                
+                # 广播更新后的配置
+                await websocket.send_json({
+                    "type": "settings",
+                    "data": current_settings
+                })
+            # 新增：处理扩展页面发送的用户输入
             elif data.get("type") == "set_user_input":
                 user_input = data.get("data", {}).get("text", "")
+                # 广播给所有连接的客户端
                 for connection in active_connections:
                     await connection.send_json({
                         "type": "update_user_input",
                         "data": {"text": user_input}
                     })
-
-            # --- [关键修改] 处理扩展页面发送的系统提示 ---
+            
+            # 新增：处理扩展页面发送的系统提示
             elif data.get("type") == "set_system_prompt":
-                has_sent_prompt = True # 标记该连接为扩展源
                 extension_system_prompt = data.get("data", {}).get("text", "")
-                
-                # 广播时携带 connection_id
+                # 广播给所有连接的客户端
                 for connection in active_connections:
                     await connection.send_json({
                         "type": "update_system_prompt",
-                        "data": {
-                            "id": connection_id,      # 这里传入连接ID
-                            "text": extension_system_prompt
-                        }
+                        "data": {"text": extension_system_prompt}
                     })
 
-            elif data.get("type") == "set_tool_input":
-                tool_input = data.get("data", {}).get("text", "")
-                for connection in active_connections:
-                    await connection.send_json({
-                        "type": "update_tool_input",
-                        "data": {"text": tool_input}
-                    })
-            # 把文字传给主界面TTS并播放
-            elif data.get("type") == "start_read":
-                has_start_tts = True
-                read_input = data.get("data", {}).get("text", "")
-                for connection in active_connections:
-                    await connection.send_json({
-                        "type": "start_tts",
-                        "data": {"text": read_input}
-                    })
-
-            # 停止主界面TTS并清空要播放的内容
-            elif data.get("type") == "stop_read":
-                for connection in active_connections:
-                    await connection.send_json({
-                        "type": "stop_tts",
-                        "data": {}
-                    })
-
+            # 新增：处理扩展页面发送的关闭窗口
             elif data.get("type") == "trigger_close_extension":
+                extension_system_prompt = data.get("data", {}).get("text", "")
+                # 广播给所有连接的客户端
                 for connection in active_connections:
                     await connection.send_json({
                         "type": "trigger_close_extension",
                         "data": {}
                     })
 
+            # 新增：处理扩展页面请求发送消息
             elif data.get("type") == "trigger_send_message":
+                # 广播给所有连接的客户端
                 for connection in active_connections:
                     await connection.send_json({
                         "type": "trigger_send_message",
                         "data": {}
                     })
                     
+            # 新增：清空消息
             elif data.get("type") == "trigger_clear_message":
+                # 广播给所有连接的客户端
                 for connection in active_connections:
                     await connection.send_json({
                         "type": "trigger_clear_message",
                         "data": {}
                     })
 
+            # 新增：请求获取最新消息
             elif data.get("type") == "get_messages":
                 for connection in active_connections:
                     await connection.send_json({
@@ -7885,45 +7361,16 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif data.get("type") == "broadcast_messages":
                 messages_data = data.get("data", {})
+                # 广播给除发送者外的所有连接
                 for connection in [conn for conn in active_connections if conn != websocket]:
                     await connection.send_json({
                         "type": "messages_update",
                         "data": messages_data
                     })
-
     except Exception as e:
         print(f"WebSocket error: {e}")
     finally:
-        if websocket in active_connections:
-            active_connections.remove(websocket)
-        
-        # --- [关键修改] 连接断开时的处理 ---
-        # 只有当该连接曾经发送过 update_system_prompt 时才触发
-        # 避免普通客户端断开时误删内容
-        if has_sent_prompt:
-            print(f"Extension {connection_id} disconnected. Removing prompt.")
-            for connection in active_connections:
-                try:
-                    # 发送移除指令，只携带 ID
-                    await connection.send_json({
-                        "type": "remove_system_prompt",
-                        "data": {
-                            "id": connection_id 
-                        }
-                    })
-                except Exception:
-                    pass
-        if has_start_tts:
-            print(f"Extension {connection_id} disconnected. Removing tts.")
-            for connection in active_connections:
-                try:
-                    # 发送移除指令，只携带 ID
-                    await connection.send_json({
-                        "type": "stop_tts",
-                        "data": {}
-                    })
-                except Exception:
-                    pass
+        active_connections.remove(websocket)
 
 from py.uv_api import router as uv_router
 app.include_router(uv_router)
