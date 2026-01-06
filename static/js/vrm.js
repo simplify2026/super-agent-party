@@ -365,7 +365,7 @@ let idleAnimationAction = null;
 let isLoadingAnimations = false;
 let idleAnimationManager = null; // 新的闲置动画管理器
 let defaultPoseAction = null; // 默认姿势动作
-let useVRMAIdleAnimations = true; // 是否使用VRM-A的闲置动画
+let useVRMAIdleAnimations = false; // 是否使用VRM-A的闲置动画（程序性动画自定义开启关闭状态20260106）
 let isIdleAnimationModeChanging = false; // 防止重复切换
 
 
@@ -790,9 +790,9 @@ async function toggleIdleAnimationMode() {
                 idleAnimationManager.switchToVRMAMode();
             }
         } else {
-            // 切换到程序化动画
+            // 动画已关闭，停止所有动画
             if (idleAnimationManager) {
-                idleAnimationManager.switchToProceduralMode();
+                idleAnimationManager.stopAllAnimations();
             }
         }
         
@@ -816,9 +816,9 @@ async function updateIdleAnimationButton() {
         button.innerHTML = useVRMAIdleAnimations ? 
             '<i class="fas fa-stop"></i>' : 
             '<i class="fas fa-play"></i>';
-        button.title = useVRMAIdleAnimations ? 
-            await t('UsingVRMAAnimations') || 'Using VRMA Animations' : 
-            await t('UsingProceduralAnimations') || 'Using Procedural Animations';
+        button.title = useVRMAIdleAnimations ?
+            await t('UsingVRMAAnimations') || 'Using VRMA Animations' :
+            await t('AnimationsDisabled') || 'Animations Disabled';
     }
 }
 
@@ -947,8 +947,8 @@ async function startIdleAnimationLoop() {
             idleAnimationManager.switchToProceduralMode();
         }
     } else {
-        // 使用程序化动画
-        idleAnimationManager.switchToProceduralMode();
+        // 动画已关闭，停止所有动画
+        idleAnimationManager.stopAllAnimations();
     }
 }
 
@@ -2335,9 +2335,9 @@ function addcontrolPanel() {
         });
 
         // 初始状态
-        idleAnimationButton.title = useVRMAIdleAnimations ? 
-            await t('UsingVRMAAnimations') || 'Using VRMA Animations' : 
-            await t('UsingProceduralAnimations') || 'Using Procedural Animations';
+        idleAnimationButton.title = useVRMAIdleAnimations ?
+            await t('UsingVRMAAnimations') || 'Using VRMA Animations' :
+            await t('AnimationsDisabled') || 'Animations Disabled';
 
         // 添加到控制面板（在字幕按钮之后）
 
@@ -3064,9 +3064,9 @@ function addcontrolPanel() {
         addHoverEffect(lockButton, isMouseLocked ? await t('UnlockWindow') : await t('LockWindow'));
         addHoverEffect(wsStatusButton, wsConnected ? await t('WebSocketConnected') : await t('WebSocketDisconnected'));
         addHoverEffect(subtitleButton, isSubtitleEnabled ? await t('SubtitleEnabled') : await t('SubtitleDisabled'));
-        addHoverEffect(idleAnimationButton, useVRMAIdleAnimations ? 
-            await t('UsingVRMAAnimations') : 
-            await t('UsingProceduralAnimations'));
+        addHoverEffect(idleAnimationButton, useVRMAIdleAnimations ?
+            await t('UsingVRMAAnimations') :
+            await t('AnimationsDisabled'));
         addHoverEffect(xrAutoBtn, await t('EnterXR') || 'Enter XR');
         // 模型切换按钮
         const prevModel = getPrevModelInfo();
@@ -3091,9 +3091,9 @@ function addcontrolPanel() {
                             ? await t('ExitFirstPerson') || 'Exit First-Person (WASD+QE)'
                             : await t('EnterFirstPerson') || 'Enter First-Person (WASD+QE)');
             // 更新闲置动画按钮提示
-            addHoverEffect(idleAnimationButton, useVRMAIdleAnimations ? 
-                await t('UsingVRMAAnimations') : 
-                await t('UsingProceduralAnimations'));
+            addHoverEffect(idleAnimationButton, useVRMAIdleAnimations ?
+                await t('UsingVRMAAnimations') :
+                await t('AnimationsDisabled'));
             
             // 更新模型切换按钮提示
             const prevModel = getPrevModelInfo();
