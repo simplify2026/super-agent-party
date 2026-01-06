@@ -37,19 +37,6 @@ const md = window.markdownit({
 }
 });
 
-// 1. 重写表格开始标签：直接输出带 wrapper 的 HTML
-md.renderer.rules.table_open = function(tokens, idx, options, env, self) {
-  // 返回：<div class="markdown-table-wrapper"><table>
-  return '<div class="markdown-table-wrapper"><table' + self.renderAttrs(tokens[idx]) + '>';
-};
-
-// 2. 重写表格结束标签：闭合 table，添加按钮，闭合 div
-md.renderer.rules.table_close = function(tokens, idx, options, env, self) {
-  // 这里我们添加一个特殊的 class "download-xlsx-btn" 用于后续事件代理
-  // 注意：onclick 这里不直接写逻辑，而是通过 Vue 的事件代理来处理
-  return '</table><button class="table-download-btn download-xlsx-trigger" type="button"><i class="fa-solid fa-file-excel"></i> XLSX</button></div>';
-};
-
 if (window.markdownitFootnote) {
     md.use(window.markdownitFootnote);
     
@@ -68,56 +55,6 @@ if (window.markdownitTaskLists) {
     });
 } else {
     console.warn('markdown-it-task-lists 插件未加载，任务列表将不会渲染。');
-}
-
-// 检查插件是否已加载
-if (window.markdownitContainer) {
-    
-    // 1. 定义 "warning" 容器 (对应 CSS 中的 .highlight-block-reasoning)
-    // 使用方法: 
-    // ::: warning 标题
-    // 内容...
-    // :::
-    md.use(window.markdownitContainer, 'warning', {
-        validate: function(params) {
-            return params.trim().match(/^warning\s*(.*)$/);
-        },
-        render: function (tokens, idx) {
-            var m = tokens[idx].info.trim().match(/^warning\s*(.*)$/);
-            if (tokens[idx].nesting === 1) {
-                // 开头标签: <div class="highlight-block-reasoning"> ...
-                var title = m[1] ? md.utils.escapeHtml(m[1]) : '';
-                var titleHtml = title ? '<strong>' + title + '</strong><br>' : '';
-                return '<div class="highlight-block-reasoning">' + titleHtml;
-            } else {
-                // 结束标签: </div>
-                return '</div>\n';
-            }
-        }
-    });
-
-    // 2. 定义 "info" 容器 (对应 CSS 中的 .highlight-block)
-    // 使用方法: 
-    // ::: info 提示
-    // 内容...
-    // :::
-    md.use(window.markdownitContainer, 'info', {
-        validate: function(params) {
-            return params.trim().match(/^info\s*(.*)$/);
-        },
-        render: function (tokens, idx) {
-            var m = tokens[idx].info.trim().match(/^info\s*(.*)$/);
-            if (tokens[idx].nesting === 1) {
-                var title = m[1] ? md.utils.escapeHtml(m[1]) : '';
-                var titleHtml = title ? '<strong>' + title + '</strong><br>' : '';
-                return '<div class="highlight-block">' + titleHtml;
-            } else {
-                return '</div>\n';
-            }
-        }
-    });
-} else {
-    console.warn('markdown-it-container 插件未加载，自定义容器将不会渲染。');
 }
 
 
@@ -592,58 +529,25 @@ let vue_methods = {
       this.isExpanded = !this.isExpanded; // 点击时切换状态
       this.maximizeWindow();
     },
-
-    throttledUpdate(index, newContent) {
-      // 更新原始数据
-      this.messages[index].content = newContent;
-      
-      // 如果已经有定时器在跑，则跳过（防抖）
-      if (this.renderTimers[index]) return;
-
-      this.renderTimers[index] = setTimeout(() => {
-        // 执行真正的渲染
-        this.messages[index].renderedHtml = this.formatMessage(newContent, index);
-        // 清除定时器
-        this.renderTimers[index] = null;
-      }, 80); // 80ms 延迟，约等于 12fps，人眼感觉流畅且不卡顿
-    },
-
-
     //  使用占位符处理 LaTeX 公式
-    formatMessage(content, index) {
-      if (!content) return '';
-
-      // 目的是防止 markdown-it 因为最后一行缺少 '|' 而在 Table 和 Paragraph 之间反复横跳
-      let processedForRender = content.trimEnd(); 
-      
-      // 获取最后一行
-      const lines = content.split('\n');
-      const lastLine = lines[lines.length - 1].trim();
-
-      // 如果最后一行以 '|' 开头（看起来像是表格行）
-      // 并且它还不是分隔行（即不是 |---| 这种）
-      // 并且它没有以 '|' 结尾
-      if (lastLine.startsWith('|') && !lastLine.endsWith('|') && !/^[|\s-:]+$/.test(lastLine)) {
-        // 临时在渲染用的字符串末尾补上 ' |'，让解析器认为这一行结束了
-        // 注意：这不会修改 this.messages 里的真实数据，只影响本次渲染
-        processedForRender += ' |';
-      }
-
-      // --- 预处理阶段 (保持您原有的逻辑) ---
+    formatMessage(content,index) {
       const parts = this.splitCodeAndText(content);
       let latexPlaceholderCounter = 0;
       const latexPlaceholders = [];
       let inUnclosedCodeBlock = false;
-
+    
       let processedContent = parts.map(part => {
         if (part.type === 'code') {
           inUnclosedCodeBlock = !part.closed;
-          return part.content; 
+          return part.content; // 直接保留原始代码块内容
         } else if (inUnclosedCodeBlock) {
-          // 修复：流式输出时，未闭合的代码块内容不要转义，否则用户会看到转义符
-          return part.content; 
+          // 处理未闭合代码块中的内容
+          return part.content
+            .replace(/`/g, '\\`') // 转义反引号
+            .replace(/\$/g, '\\$'); // 转义美元符号
         } else {
-          // 处理 <think> 标签
+          // 处理非代码内容
+          // 处理think标签
           const thinkTagRegexWithClose = /<think>([\s\S]*?)<\/think>/g;
           const thinkTagRegexOpenOnly = /<think>[\s\S]*$/;
           
@@ -654,10 +558,9 @@ let vue_methods = {
             .replace(thinkTagRegexOpenOnly, match => 
               match.replace('<think>', '<div class="highlight-block-reasoning">')
             );
-
-          // 处理 LaTeX 公式 (提取并占位)
-          // 优化正则：增加非捕获组以提高性能
-          const latexRegex = /(\$(?:\\.|[^\$\\])*\$)|(\\\[(?:\\.|[^\\])*\\\])/g;
+    
+          // 处理LaTeX公式
+          const latexRegex = /(\$.*?\$)|(\\\[.*?\\\])|(\\$.*?$)/g;
           return formatted.replace(latexRegex, (match) => {
             const placeholder = `LATEX_PLACEHOLDER_${latexPlaceholderCounter++}`;
             latexPlaceholders.push({ placeholder, latex: match });
@@ -665,73 +568,59 @@ let vue_methods = {
           });
         }
       }).join('');
-
-      // --- 渲染阶段 ---
-      // 移除这一步的 removeNonAsciiTags，通常它会破坏中文显示，除非你有特殊需求
-      // processedContent = removeNonAsciiTags(processedContent); 
-
+      // 删除包含非ASCII码的HTML标签
+      processedContent = removeNonAsciiTags(processedContent)
+      // 渲染Markdown
       let rendered = md.render(processedContent);
-
-      // --- 恢复阶段 ---
-      // 恢复 LaTeX
+    
+      // 恢复LaTeX占位符
       latexPlaceholders.forEach(({ placeholder, latex }) => {
         rendered = rendered.replace(placeholder, latex);
       });
-
-      // 处理未闭合代码块的转义 (如果有)
+    
+      // 处理未闭合代码块的转义字符
       rendered = rendered.replace(/\\\`/g, '`').replace(/\\\$/g, '$');
 
-      // 处理思考中的状态 (Thinking...)
-      const currentMsg = this.messages[index];
-      // 只有当是最后一条消息、角色是助手、且正在输入时才显示“思考中”图标
-      if (index === this.messages.length - 1 && currentMsg?.role === 'assistant' && this.isTyping && currentMsg.content !== currentMsg.pure_content) {
-        // 注意：这里不要直接加在 rendered 字符串里，最好在模板中通过 v-if 控制，
-        // 但为了兼容您的逻辑，我们保留：
-        rendered = `<div class="thinking-header"><i class="fa-solid fa-lightbulb"></i> ${this.t('thinking')}</div>` + rendered;
+      this.$nextTick(() => {
+        MathJax.typesetPromise()
+          .then(() => {
+            this.initCopyButtons();
+            this.initPreviewButtons();
+          })
+          .catch(console.error);
+      });
+
+
+      if (index == this.messages.length - 1 && this.messages[index].role === 'assistant' && this.messages[index]?.briefly && this.messages[index]?.content != this.messages[index]?.pure_content&&this.isTyping) {
+        rendered = `<i class="fa-solid fa-lightbulb">${this.t('thinking')}</i><br>` + rendered
       }
 
-      // --- 后处理 (MathJax & Mermaid) ---
-      // 我们不再在 formatMessage 内部直接调用 MathJax，而是将其推入队列
-      this.$nextTick(() => {
-        this.queueMathJax(index);
-        this.initCopyButtons();
-        this.initPreviewButtons();
-        // Mermaid 也可以在这里懒加载
-      });
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = rendered;
+      // 处理链接标签
+      const links = tempDiv.getElementsByTagName('a');
+      for (const link of links) {
+        // 【新增】检测是否为脚注相关的链接
+        // 1. footnote-ref: 正文中的上标数字 (通常包裹在 sup 中，或自身带有该类)
+        // 2. footnote-backref: 底部列表跳回正文的箭头
+        const isFootnoteRef = link.parentElement && link.parentElement.classList.contains('footnote-ref');
+        const isFootnoteBack = link.classList.contains('footnote-backref');
 
-      // 处理链接 (保持您原有的 DOM 操作逻辑，但建议用正则替换以提高性能)
-      // 使用正则替换 href，比创建 DOM 树快得多
-      rendered = rendered.replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"([^>]*)>/g, (match, href, otherAttrs) => {
-        // 检查是否为脚注
-        if (otherAttrs.includes('footnote-ref') || otherAttrs.includes('footnote-backref') || href.startsWith('#')) {
-          return match; 
+        if (isFootnoteRef || isFootnoteBack) {
+          // 如果是脚注，不做任何文件路径处理，也不强制新窗口打开
+          // 它们只需要能在当前页面锚点跳转即可
+          continue; 
         }
-        const formattedHref = this.formatFileUrl(href);
-        return `<a href="${formattedHref}" target="_blank"${otherAttrs}>`;
-      });
 
-      return rendered;
-    },
-
-  // 3. MathJax 队列处理 (解决流式输出时的公式闪烁/报错)
-  queueMathJax(index) {
-    // 找到对应的 DOM 元素（假设您在 template 中给了消息容器一个 ID，如 id="msg-content-${index}"）
-    const element = document.getElementById(`message-content-${index}`);
-    if (!element) return;
-
-    // 将渲染任务加入队列
-    this.mathJaxQueue = this.mathJaxQueue.then(() => {
-      if (!window.MathJax) return Promise.resolve();
-      // 使用 typesetPromise 而不是 typeset
-      return window.MathJax.typesetPromise([element]).catch(err => {
-        // 忽略渲染过程中的临时错误（常见于流式传输公式未闭合时）
-        console.debug('MathJax rendering skipped:', err.message);
-      });
-    });
-  },
-    formatMessageWrapper(content) {
-        // 调用您现有的 formatMessage，这里传 index = -1 避免产生副作用（如 thinking 图标）
-        return this.formatMessage(content, -1); 
+        // --- 下面是原本的普通链接处理逻辑 ---
+        const originalHref = link.getAttribute('href');
+        if (originalHref) {
+          link.setAttribute('href', this.formatFileUrl(originalHref));
+        }
+        link.setAttribute('target', '_blank');
+      }
+      
+      return tempDiv.innerHTML;
     },
     copyLink(uniqueFilename) {
       const url = `${this.partyURL}/uploaded_files/${uniqueFilename}`
@@ -1272,6 +1161,9 @@ let vue_methods = {
               return existingButton;
             });
           }
+
+          // 根据当前设备类型设置MoreButtonDict
+          this.checkMobile();
           this.currentLanguage = data.data.currentLanguage || this.currentLanguage;
           this.mcpServers = data.data.mcpServers || this.mcpServers;
           this.a2aServers = data.data.a2aServers || this.a2aServers;
@@ -1314,7 +1206,6 @@ let vue_methods = {
           this.checkDiscordBotStatus();
           this.checkLiveStatus();
           this.fetchRemotePlugins();
-          this.fetchTetosVoices(this.ttsSettings.engine);
           if (this.asrSettings.enabled) {
             this.startASR();
           }
@@ -1329,38 +1220,19 @@ let vue_methods = {
         else if (data.type === 'update_user_input') {
           this.userInput = data.data.text;
         }
-        // 更新或添加提示词
+        // 新增：处理系统消息更新
         else if (data.type === 'update_system_prompt') {
-            const id = data.data.id;
-            const text = data.data.text;
-            this.extensionsSystemPromptsDict[id] = text; 
-        }
-        
-        // 移除提示词 (对应后端 finally 中的逻辑)
-        else if (data.type === 'remove_system_prompt') {
-            const id = data.data.id;
-            
-            if (this.extensionsSystemPromptsDict[id]) {
-                delete this.extensionsSystemPromptsDict[id];
-            }
-        }
-        // 新增：处理工具输入
-        else if (data.type === 'update_tool_input') {
-          this.userInput = data.data.text;
-          this.sendMessage(role = 'system')
-        }
-        // 新增：处理TTS输入
-        else if (data.type === 'start_tts') {
-          this.readConfig.longText = data.data.text;
-          // 等待0.5s
-          setTimeout(() => {
-            this.startRead();
-          }, 500);
-        }
-        // 新增：停止TTS
-        else if (data.type === 'stop_tts') {
-          this.stopTTSActivities();
-          this.readConfig.longText = '';
+          if (this.messages[0].role === 'system') {
+            this.messages[0].content = data.data.text
+          }else{
+            this.messages.unshift(
+              { 
+                "role": "system",
+                "content": data.data.text
+              }
+            )
+          }
+
         }
         // 新增：处理关闭扩展侧边栏
         else if (data.type === 'trigger_close_extension') {
@@ -1743,20 +1615,6 @@ let vue_methods = {
         }
       }
       await this.saveConversations();
-      // 插入this.extensionsSystemPromptsDict到系统消息中
-      if(this.extensionsSystemPromptsDict){
-        // 去重并拼接所有的提示词
-        const combinedPrompt = Object.values(this.extensionsSystemPromptsDict).filter(Boolean).join('\n\n');
-        console.log(combinedPrompt);
-        // 如果第一个消息时system
-        if (messages[0].role === 'system') {
-          // 将combinedPrompt添加到第一个消息的内容中
-          messages[0].content += '\n\n' + combinedPrompt;
-        } else {
-          // 否则，将combinedPrompt添加到消息列表的开头
-          messages.unshift({ role: 'system', content: combinedPrompt });
-        }
-      }
       try {
         console.log('Sending message...');
         // 请求参数需要与后端接口一致
@@ -2007,10 +1865,7 @@ let vue_methods = {
             conv.system_prompt = this.system_prompt;
           }
         }
-        if (this.ttsSettings.enabled) {
-          // 等待TTS和音频播放进程完成
-          await Promise.all([ttsProcess, audioProcess]);
-        }
+        // TTS进程是异步的，不在这里等待，让它在后台完成
         this.isThinkOpen = false;
         this.isSending = false;
         this.isTyping = false;
@@ -2369,6 +2224,10 @@ let vue_methods = {
     async clearMessages() {
       this.stopGenerate();
       this.messages = [{ role: 'system', content: this.system_prompt }];
+      // extension.systemPrompt填充到this.messages[0].content
+      if (this.currentExtension) {
+        this.messages[0].content = this.currentExtension.systemPrompt;
+      }
       this.conversationId = null;
       this.fileLinks = [];
       this.isThinkOpen = false; // 重置思考模式状态
@@ -4755,30 +4614,35 @@ handleCreateDiscordSeparator(val) {
     },
     checkMobile() {
       this.isMobile = window.innerWidth <= 768;
-      this.isAssistantMode = window.innerWidth <= 350 && window.innerHeight <= 680;
+      // 只有在非助手模式时才自动检测是否进入助手模式，避免覆盖手动设置
+      if (!this.isAssistantMode) {
+        this.isAssistantMode = window.innerWidth <= 350 && window.innerHeight <= 680;
+      }
       this.isCapsuleMode = window.innerWidth <= 230 && window.innerHeight <= 100;
+      // MoreButtonDict 直接引用对应的字典，用户修改时会同步到保存的字典中
       if (this.isMobile) {
         this.MoreButtonDict = this.smallMoreButtonDict;
       }
       else{
         this.MoreButtonDict = this.largeMoreButtonDict;
       }
-      if (this.isAssistantMode){
-        if(!this.isFixedWindow){
-          this.isFixedWindow = true;
-          if (isElectron){
-            window.electronAPI.setAlwaysOnTop(this.isFixedWindow);
-          }
-        }
-        
-      }else{
-        if(this.isFixedWindow){
-          this.isFixedWindow = false;
-          if (isElectron){
-            window.electronAPI.setAlwaysOnTop(this.isFixedWindow);
-          }
-        }
-      }
+      // 注释掉助手模式自动激活固定窗口的功能，避免遮挡VRM模型
+      // if (this.isAssistantMode){
+      //   if(!this.isFixedWindow){
+      //     this.isFixedWindow = true;
+      //     if (isElectron){
+      //       window.electronAPI.setAlwaysOnTop(this.isFixedWindow);
+      //     }
+      //   }
+      //
+      // }else{
+      //   if(this.isFixedWindow){
+      //     this.isFixedWindow = false;
+      //     if (isElectron){
+      //       window.electronAPI.setAlwaysOnTop(this.isFixedWindow);
+      //     }
+      //   }
+      // }
       if(this.isMobile) this.sidebarVisible = false;
     },
     // 添加ComfyUI服务器
@@ -6220,7 +6084,7 @@ handleCreateDiscordSeparator(val) {
               }
             }
           }
-          
+
           if (remainingText && this.ttsSettings.bufferWordList.length > 0  && newttsList == []){
             for (const exp of this.expressionMap) {
               const regex = new RegExp(exp, 'g');
@@ -6233,7 +6097,7 @@ handleCreateDiscordSeparator(val) {
             // 检查remainingText是否包含中文字符
             const hasChinese = /[\u4e00-\u9fa5]/.test(remainingText);
 
-            if ((hasChinese && remainingText?.length > 5) || 
+            if ((hasChinese && remainingText?.length > 5) ||
                 (!hasChinese && remainingText?.length > 10)) {
                 // 在lastMessage.ttsChunks开头第一个元素前插入内容
                 if (this.ttsSettings.bufferWordList.length > 0) {
@@ -6248,12 +6112,12 @@ handleCreateDiscordSeparator(val) {
         }
 
         max_concurrency = this.ttsSettings.maxConcurrency || 1; // 最大并发数
-        while (lastMessage.ttsQueue.size < max_concurrency && 
+        while (lastMessage.ttsQueue.size < max_concurrency &&
               nextIndex < lastMessage.ttsChunks.length) {
           if (!this.TTSrunning) break;
           const index = nextIndex++;
           lastMessage.ttsQueue.add(index);
-          
+
           this.processTTSChunk(lastMessage, index).finally(() => {
             lastMessage.ttsQueue.delete(index);
           });
@@ -6265,7 +6129,17 @@ handleCreateDiscordSeparator(val) {
             await new Promise(resolve => setTimeout(resolve, 800));
           }
         }
-        
+
+        // 如果还有未处理的chunks或者仍在接收消息，继续等待
+        // 只有当所有chunks都处理完且消息接收完成时才退出
+        if (nextIndex >= lastMessage.ttsChunks.length && !this.isTyping) {
+          // 检查是否所有队列中的任务都完成了
+          if (lastMessage.ttsQueue.size === 0) {
+            console.log('All TTS chunks processed and message completed');
+            break;
+          }
+        }
+
         await new Promise(resolve => setTimeout(resolve, 10));
       }
       console.log('TTS queue processing completed');
@@ -9298,7 +9172,8 @@ stopTTSActivities() {
       console.log('退出助手模式，最大化窗口');
       window.electronAPI.windowAction('maximize'); // 恢复默认大小
     } else {
-      // 进入助手模式，设置为300x屏幕高度
+      // 进入助手模式，设置为340x屏幕宽度
+      // 当启用助手模式时，窗口会变成一个窄长的垂直条，位于屏幕的最右侧，宽度为 340 像素，高度占满整个屏幕可用区域。
       const screenHeight = window.screen.availHeight || window.innerHeight || 800;
       console.log('进入助手模式，设置大小为:', 340, screenHeight);
       window.electronAPI.toggleWindowSize(340, screenHeight);
@@ -10304,6 +10179,7 @@ clearSegments() {
     this.showExtensionsDialog = false;
     this.expandChatArea();
     this.collapseSidePanel();
+    this.messages[0].content = '';
   },
   // 打开扩展选择对话框
   openExtensionsDialog() {
@@ -10315,6 +10191,9 @@ clearSegments() {
     this.sidePanelURL = '';
     this.showExtensionsDialog = false; // 关闭对话框
     this.currentExtension = extension;
+    if (this.currentExtension.systemPrompt){
+      this.messages[0].content = this.currentExtension.systemPrompt;
+    }
     this.expandSidePanel();
     await this.loadExtension(extension);
   },
@@ -10775,6 +10654,7 @@ async togglePlugin(plugin) {
 
     // 下面逻辑你原来就有，只把 url 换成异步得到的即可
     this.showExtensionsDialog = false;
+    this.messages[0].content = extension.systemPrompt || '';
     let windowWidth = 800;
     let windowHeight = 600;
     if (window.electronAPI && window.electronAPI.openExtensionWindow) {
@@ -11335,75 +11215,6 @@ async togglePlugin(plugin) {
     });
   },
 
-  // 全局点击事件代理
-  handleGlobalClick(event) {
-    // 1. 检查点击的是否是 Excel 导出按钮
-    // closest 处理用户可能点到图标 <i> 的情况
-    const btn = event.target.closest('.download-xlsx-trigger');
-    
-    if (btn) {
-      event.preventDefault();
-      event.stopPropagation();
-      
-      // 找到同级的前一个兄弟元素 (即 table)
-      // 根据上面 markdown-it 的结构: <table>...</table> <button>...</button>
-      // 所以 button.previousElementSibling 就是 table
-      const table = btn.previousElementSibling;
-      
-      if (table && table.tagName === 'TABLE') {
-        this.exportTable(btn, table);
-      }
-    }
-  },
-
-    handleMessageLinkClick(event) {
-        // 1. 如果你原有的 handleGlobalClick 有逻辑（比如点击空白处关闭菜单），在这里调用它
-        this.handleGlobalClick(event); 
-
-        if(isElectron){
-
-          const link = event.target.closest('a');
-
-          if (link && link.href) {
-              const href = link.href;
-
-              // 2. 过滤逻辑：只拦截 http/https 网络链接
-              if (href.startsWith('http') || href.startsWith('https')) {
-                  
-                  // ★ 关键：同时调用 stopPropagation 和 preventDefault
-                  event.preventDefault();  // 阻止链接默认跳转
-                  event.stopPropagation(); // 阻止事件继续传播
-                  
-                  // 3. 打开内部浏览器
-                  console.log('拦截到链接，正在内部浏览器打开:', href);
-                  this.openUrlInNewTab(href);
-              }
-          }
-        
-        }
-
-    },
-
-  // 这里的逻辑跟您原来的 click 类似，只是参数变了
-  async exportTable(btn, tableElement) {
-    if (btn.disabled) return; // 防止重复点击
-
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 导出中...';
-    btn.disabled = true;
-
-    try {
-      await this.downloadTableAsXLSX(tableElement);
-    } catch (error) {
-      console.error('导出失败', error);
-      // 如果有 Element Plus
-      if (this.$message) this.$message.error('导出失败');
-    } finally {
-      btn.innerHTML = originalHtml;
-      btn.disabled = false;
-    }
-  },
-
   /**
    * 使用 ExcelJS 生成真正的 .xlsx 文件
    */
@@ -11521,578 +11332,4 @@ async togglePlugin(plugin) {
       return segments;
     },
 
-    async fetchTetosNewVoices(provider) {
-        this.newTTSConfig.isFetchingVoices = true;
-        this.newTTSConfig.tetosVoices = []; // 清空现有列表
-        
-        let config = {};
-        const s = this.newTTSConfig;
-
-        // 根据 provider 构建 config
-        switch(provider) {
-            case 'azure':
-                config = { speech_key: s.azureSpeechKey, speech_region: s.azureRegion };
-                break;
-            case 'volcengine':
-                config = { access_key: s.volcAccessKey, secret_key: s.volcSecretKey, app_key: s.volcAppKey };
-                break;
-            case 'baidu':
-                config = { api_key: s.baiduApiKey, secret_key: s.baiduSecretKey };
-                break;
-            case 'minimax':
-                config = { api_key: s.minimaxApiKey, group_id: s.minimaxGroupId };
-                break;
-            case 'xunfei':
-                config = { app_id: s.xunfeiAppId, api_key: s.xunfeiApiKey, api_secret: s.xunfeiApiSecret };
-                break;
-            case 'fish':
-                config = { api_key: s.fishApiKey };
-                break;
-            case 'google':
-                // 尝试解析 JSON 字符串
-                try {
-                    if (s.googleServiceAccount) {
-                         config = { service_account: JSON.parse(s.googleServiceAccount) };
-                    }
-                } catch (e) {
-                    this.newTTSConfig.isFetchingVoices = false;
-                    return;
-                }
-                break;
-        }
-
-        try {
-            const response = await fetch('/tts/tetos/list_voices', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider: provider, config: config })
-            });
-            const result = await response.json();
-            
-            if (result.status === 'success') {
-                this.newTTSConfig.tetosVoices = result.data;
-            } else {
-                console.error(result);
-            }
-        } catch (error) {
-            console.error('Error fetching voices:', error);
-        } finally {
-            this.newTTSConfig.isFetchingVoices = false;
-        }
-    },
-
-    async fetchTetosVoices(provider) {
-        this.ttsSettings.isFetchingVoices = true;
-        this.ttsSettings.tetosVoices = []; // 清空现有列表
-        
-        let config = {};
-        const s = this.ttsSettings;
-
-        // 根据 provider 构建 config
-        switch(provider) {
-            case 'azure':
-                config = { speech_key: s.azureSpeechKey, speech_region: s.azureRegion };
-                break;
-            case 'volcengine':
-                config = { access_key: s.volcAccessKey, secret_key: s.volcSecretKey, app_key: s.volcAppKey };
-                break;
-            case 'baidu':
-                config = { api_key: s.baiduApiKey, secret_key: s.baiduSecretKey };
-                break;
-            case 'minimax':
-                config = { api_key: s.minimaxApiKey, group_id: s.minimaxGroupId };
-                break;
-            case 'xunfei':
-                config = { app_id: s.xunfeiAppId, api_key: s.xunfeiApiKey, api_secret: s.xunfeiApiSecret };
-                break;
-            case 'fish':
-                config = { api_key: s.fishApiKey };
-                break;
-            case 'google':
-                // 尝试解析 JSON 字符串
-                try {
-                    if (s.googleServiceAccount) {
-                         config = { service_account: JSON.parse(s.googleServiceAccount) };
-                    }
-                } catch (e) {
-                    this.ttsSettings.isFetchingVoices = false;
-                    return;
-                }
-                break;
-        }
-
-        try {
-            const response = await fetch('/tts/tetos/list_voices', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider: provider, config: config })
-            });
-            const result = await response.json();
-            
-            if (result.status === 'success') {
-                this.ttsSettings.tetosVoices = result.data;
-            } else {
-                console.error(result);
-            }
-        } catch (error) {
-            console.error('Error fetching voices:', error);
-        } finally {
-            this.ttsSettings.isFetchingVoices = false;
-        }
-    },
-
-    // 1. 获取音色显示名称 (Label)
-    getVoiceLabel(v) {
-        // 情况 A: 数据是纯字符串 (你刚才展示的情况)
-        if (typeof v === 'string') return v;
-        
-        // 情况 B: 数据是对象 (Azure等)
-        if (v && typeof v === 'object') {
-            // 优先查找显示名称，如果没有则找 id 或 name
-            return v.DisplayName || v.local_name || v.name || v.Name || v.id || v.Id || v.ShortName || 'Unknown Voice';
-        }
-        return 'Unknown';
-    },
-
-    // 2. 获取音色实际值 (Value - 传给后端的)
-    getVoiceValue(v) {
-        // 情况 A: 纯字符串
-        if (typeof v === 'string') return v;
-        
-        // 情况 B: 对象
-        if (v && typeof v === 'object') {
-            return v.ShortName || v.id || v.Id || v.name || '';
-        }
-        return '';
-    },
-
-    // 3. 获取辅助信息 (显示在右侧的灰色小字，如语言)
-    getVoiceDesc(v) {
-        // 纯字符串没有额外信息，返回空
-        if (typeof v === 'string') return '';
-        
-        // 对象可能包含语言信息
-        if (v && typeof v === 'object') {
-            const lang = v.Locale || v.locale || v.Language || v.language || (v.language_codes ? v.language_codes[0] : '');
-            return lang ? `[${lang}]` : '';
-        }
-        return '';
-    },
-
-
-    // AI浏览器相关
-    openUrlInNewTab(url) {
-        // 如果 url 为空或者无效，可以做个判断，或者直接打开
-        if (!url) return;
-
-        const newTab = {
-            id: Date.now(),
-            title: 'Loading...',
-            url: url,
-            favicon: '',
-            isLoading: true,
-            canGoBack: false,
-            canGoForward: false
-        };
-        this.browserTabs.push(newTab);
-        this.switchTab(newTab.id);
-        this.activeMenu = 'ai-browser';
-    },
-
-    // 切换标签
-    switchTab(id) {
-        this.currentTabId = id;
-        const tab = this.browserTabs.find(t => t.id === id);
-        if (tab) {
-            // 更新地址栏
-            this.urlInput = tab.url; 
-            // 如果是欢迎页，清空地址栏显示
-            if (!tab.url) this.urlInput = '';
-        }
-    },
-
-    // 添加新标签
-    addNewTab() {
-        const newTab = {
-            id: Date.now(),
-            title: 'New Tab',
-            url: '',
-            favicon: '',
-            isLoading: false,
-            canGoBack: false,
-            canGoForward: false
-        };
-        this.browserTabs.push(newTab);
-        this.switchTab(newTab.id);
-    },
-
-    // 关闭标签
-    closeTab(id, event) {
-        if (event) event.stopPropagation(); // 防止触发点击切换
-        
-        const index = this.browserTabs.findIndex(t => t.id === id);
-        if (index === -1) return;
-
-        // 如果关闭的是当前标签，需要切换到另一个
-        if (this.currentTabId === id) {
-            if (this.browserTabs.length > 1) {
-                // 优先切到右边，没右边切左边
-                const nextTab = this.browserTabs[index + 1] || this.browserTabs[index - 1];
-                this.currentTabId = nextTab.id;
-                this.urlInput = nextTab.url;
-            } else {
-                // 如果只剩这一个，重置它而不是删除
-                this.addNewTab(); // 加个新的
-                this.browserTabs.splice(index, 1); // 删掉旧的
-                return;
-            }
-        }
-        
-        this.browserTabs.splice(index, 1);
-    },
-
-    // 地址栏回车
-    handleUrlEnter() {
-        let val = this.urlInput.trim();
-        if (!val) return;
-
-        // 简单的 URL 补全逻辑
-        if (!/^https?:\/\//i.test(val)) {
-            // 如果看起来像域名
-            if (/^([\w-]+\.)+[\w-]+/.test(val) && !val.includes(' ')) {
-                val = 'https://' + val;
-            } else {
-                // 否则当做搜索
-                if (this.searchEngine === 'google') {
-                    val = `https://www.google.com/search?q=${encodeURIComponent(val)}`;
-                } else {
-                    val = `https://www.bing.com/search?q=${encodeURIComponent(val)}`;
-                }
-            }
-        }
-
-        this.navigateTo(val);
-    },
-
-    // 欢迎页搜索回车
-    handleWelcomeSearch() {
-        const query = this.welcomeSearchQuery.trim();
-        if (!query) return;
-
-        let searchUrl = '';
-        if (this.searchEngine === 'google') {
-            searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-        } else {
-            searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
-        }
-        
-        this.navigateTo(searchUrl);
-    },
-
-    // 核心导航方法
-    navigateTo(url) {
-        if (!this.currentTab) return;
-        
-        this.currentTab.url = url;
-        this.urlInput = url;
-        
-        // 强制 Vue 更新后，获取 webview DOM 并加载 URL
-        // 因为如果之前 url 为空，webview 是 v-if 销毁状态，现在才渲染出来
-        this.$nextTick(() => {
-            const webview = document.getElementById('webview-' + this.currentTabId);
-            if (webview) {
-                // 如果 webview 刚创建，直接设置 src 属性即可 (Vue绑定已处理)
-                // 但如果它已经存在，调用 loadURL 更稳
-                 webview.loadURL(url);
-            }
-        });
-    },
-    
-    // 回到主页 (新标签页)
-    goHome() {
-        if(this.currentTab) {
-            this.currentTab.url = '';
-            this.currentTab.title = 'New Tab';
-            this.currentTab.favicon = '';
-            this.urlInput = '';
-        }
-    },
-
-    // --- Webview 导航控制 ---
-    getWebview(id) {
-        return document.getElementById('webview-' + (id || this.currentTabId));
-    },
-
-    browserGoBack() {
-        const wv = this.getWebview();
-        if (wv && wv.canGoBack()) wv.goBack();
-    },
-
-    browserGoForward() {
-        const wv = this.getWebview();
-        if (wv && wv.canGoForward()) wv.goForward();
-    },
-
-    browserReload() {
-        const wv = this.getWebview();
-        if(!wv) return;
-        if (this.currentTab.isLoading) {
-            wv.stop();
-        } else {
-            wv.reload();
-        }
-    },
-
-    // --- Webview 事件监听 ---
-    // 注意：这些事件在 HTML 中通过 @did-start-loading="..." 绑定
-    
-    onDidStartLoading(id) {
-        const tab = this.browserTabs.find(t => t.id === id);
-        if (tab) tab.isLoading = true;
-    },
-
-    onDidStopLoading(id) {
-        const tab = this.browserTabs.find(t => t.id === id);
-        if (tab) {
-            tab.isLoading = false;
-            // 更新导航状态
-            const wv = document.getElementById('webview-' + id);
-            if (wv) {
-                tab.canGoBack = wv.canGoBack();
-                tab.canGoForward = wv.canGoForward();
-                // 尝试获取 URL (为了防止重定向后 URL 没变)
-                if (wv.getURL()) {
-                     tab.url = wv.getURL();
-                     if (this.currentTabId === id) this.urlInput = tab.url;
-                }
-            }
-        }
-    },
-
-    onPageTitleUpdated(id, event) {
-        const tab = this.browserTabs.find(t => t.id === id);
-        if (tab) tab.title = event.title;
-    },
-
-    onPageFaviconUpdated(id, event) {
-        const tab = this.browserTabs.find(t => t.id === id);
-        if (tab && event.favicons && event.favicons.length > 0) {
-            tab.favicon = event.favicons[0];
-        }
-    },
-
-    // 处理网页内部 window.open
-    onNewWindow(id, event) {
-        // 在应用内新建标签页打开，而不是弹出新窗口
-        const { url } = event;
-        const newTab = {
-            id: Date.now(),
-            title: 'Loading...',
-            url: url,
-            favicon: '',
-            isLoading: true,
-            canGoBack: false,
-            canGoForward: false
-        };
-        this.browserTabs.push(newTab);
-        this.switchTab(newTab.id);
-    },
-    
-    // 在 methods 中添加或修改 onDomReady
-    onDomReady(tabId) {
-        const webview = document.getElementById('webview-' + tabId);
-        if (!webview) return;
-
-        webview.addEventListener('context-menu', (e) => {
-            // ★★★ 关键调试点：打印出 Electron 传来的所有参数 ★★★
-            console.log('Webview Context Menu Params:', e.params);
-            
-            const params = e.params;
-            let menuType = 'default';
-            let data = {};
-
-            // 重新审视和调整判断逻辑的顺序，确保最具体的匹配优先
-            if (params.mediaType === 'image' && params.srcURL && params.srcURL.length > 0) {
-                menuType = 'image';
-                data = { src: params.srcURL };
-                console.log('Detected Image Context:', data); // 调试
-            } else if (params.linkURL && params.linkURL.length > 0) {
-                menuType = 'link';
-                data = { 
-                    url: params.linkURL, 
-                    text: params.linkText || params.selectionText || '' 
-                };
-                console.log('Detected Link Context:', data); // 调试
-            } else if (params.selectionText && params.selectionText.length > 0) {
-                menuType = 'text';
-                data = { text: params.selectionText };
-                console.log('Detected Text Context:', data); // 调试
-            } else {
-                menuType = 'default';
-                console.log('Detected Default Context'); // 调试
-            }
-
-            // 再次打印最终决定发送的类型和数据
-            console.log(`Sending context menu request: Type = ${menuType}, Data =`, data);
-
-            window.electronAPI.showContextMenu(menuType, data);
-        });
-    },
-
-    // 切换引擎下拉
-    toggleEngineDropdown() {
-        this.showEngineDropdown = !this.showEngineDropdown;
-    },
-
-    // 设置引擎并关闭下拉
-    setSearchEngine(engine) {
-        this.searchEngine = engine;
-        this.showEngineDropdown = false;
-        // 如果想要切换后自动聚焦输入框
-        this.$nextTick(() => {
-            const input = document.querySelector('.ios-search-input');
-            if(input) input.focus();
-        });
-    },
-
-    // 搜索框失焦处理 (延迟关闭下拉，防止点击菜单项时菜单先消失)
-    handleSearchBlur() {
-        this.isSearchFocused = false;
-        setTimeout(() => {
-            this.showEngineDropdown = false;
-        }, 200);
-    },
-
-    // 修改原有的 addNewTab，确保样式正确
-    addNewTab() {
-        const newTab = {
-            id: Date.now(),
-            title: 'New Tab',
-            url: '',
-            favicon: '',
-            isLoading: false,
-            canGoBack: false,
-            canGoForward: false
-        };
-        this.browserTabs.push(newTab);
-        this.switchTab(newTab.id);
-        
-        // 自动聚焦到欢迎页搜索框
-        this.$nextTick(() => {
-             const input = document.querySelector('.ios-search-input');
-             if(input) input.focus();
-        });
-    },
-
-    handleSelectorEnter() {
-        if (this.dropdownTimer) clearTimeout(this.dropdownTimer);
-        this.showEngineDropdown = true;
-    },
-
-    // 鼠标离开区域：延迟 200ms 关闭，给用户移动鼠标的时间
-    handleSelectorLeave() {
-        this.dropdownTimer = setTimeout(() => {
-            this.showEngineDropdown = false;
-        }, 200); // 200ms 延迟
-    },
-
-    // ★★★ 核心：处理边缘滚动 ★★★
-    handleTabsMouseMove(e) {
-      // 在 Options API 中，通过 this.$refs 访问 DOM
-      const container = this.$refs.tabsContainerRef;
-      
-      if (!container) return;
-
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left; // 鼠标相对于容器左侧的距离
-      const width = rect.width;
-      const threshold = 60; // 边缘触发滚动的范围 (px)
-      const speed = 8;      // 滚动速度
-
-      // 先清除可能存在的旧定时器
-      this.stopEdgeScroll();
-
-      // 定义滚动函数
-      const scroll = (direction) => {
-        if (direction === 'left') {
-          container.scrollLeft -= speed;
-        } else {
-          container.scrollLeft += speed;
-        }
-        // 持续循环
-        this.scrollInterval = requestAnimationFrame(() => scroll(direction));
-      };
-
-      // 判断鼠标位置
-      if (x < threshold) {
-        // 鼠标在左边缘 -> 向左滑
-        scroll('left');
-      } else if (x > width - threshold) {
-        // 鼠标在右边缘 -> 向右滑
-        scroll('right');
-      } else {
-        // 在中间 -> 停止滚动
-        this.stopEdgeScroll();
-      }
-    },
-
-    // 停止滚动
-    stopEdgeScroll() {
-      if (this.scrollInterval) {
-        cancelAnimationFrame(this.scrollInterval);
-        this.scrollInterval = null;
-      }
-    },
-
-
-    controlDownload(id, action) {
-        window.downloadAPI.controlDownload(id, action);
-    },
-
-    handleStopOrRemove(item) {
-        if (item.state === 'progressing' || item.state === 'paused') {
-            // 如果还在下载，就是取消
-            this.controlDownload(item.id, 'cancel');
-        } else {
-            // 如果已完成或已取消，就是从列表中删除记录
-            this.downloads = this.downloads.filter(d => d.id !== item.id);
-        }
-    },
-
-    openFileFolder(path) {
-        if(path) window.downloadAPI.showItemInFolder(path);
-    },
-
-    clearFinishedDownloads() {
-        // 只保留正在下载的项目
-        this.downloads = this.downloads.filter(d => d.state === 'progressing' || d.state === 'paused');
-    },
-
-    // 字节格式化工具
-    formatBytes(bytes, decimals = 1) {
-        if (!bytes) return '0 B';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    },
-    handleDropdownEnter() {
-        // 1. 如果有关闭的定时器正在倒计时，立刻取消它！
-        if (this.dropdownTimer) {
-            clearTimeout(this.dropdownTimer);
-            this.dropdownTimer = null;
-        }
-        // 2. 显示面板
-        this.showDownloadDropdown = true;
-    },
-
-    // ★ 鼠标离开
-    handleDropdownLeave() {
-        // 给用户 300ms 的反应时间
-        this.dropdownTimer = setTimeout(() => {
-            this.showDownloadDropdown = false;
-            this.dropdownTimer = null;
-        }, 300); 
-    },
 }
